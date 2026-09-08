@@ -1,0 +1,21 @@
+# build dependencies / assets (recreate with `npm install ... --legacy-peer-deps`, see DEVELOPMENT.md §2)
+node_modules/
+.npm-cache/
+
+# built client bundle (regenerate with `node scripts/build.mjs`)
+lib/client.js
+
+# misc
+.DS_Store
+*.tmp-*
+.npm-cache-tmp/
+
+# local project kanban board state (workspace tool artifact)
+.dsh-kanban.json
+
+# lockfile: install flow is documented (`npm install --legacy-peer-deps`),
+# the plugin ships no lockfile
+package-lock.json
+
+# .dsh/: private/internal docs (release SOP, session memory) — never tracked
+.dsh/

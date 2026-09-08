@@ -1,0 +1,22 @@
+# dsh-draft bundle patch
+#
+# One loader row mounting the plugin into a dsh profile:
+#
+#   dsh plugin --profile <name> add /path/to/dsh-draft
+#
+# (The `dsh.bundle.patch` declaration makes the CLI reconcile this package
+# into the profile's `dsh.profile.bundles` stack.)
+#
+# For a hand-rolled install without the bundle channel (what this profile
+# uses), append the same row to the profile's own cordis.patch.yml instead:
+#
+#   - insert:
+#       - id: draft
+#         name: dsh-draft
+#
+# The row name must equal the package name: the browser roster scan
+# (client-modules) locates `package.json` and the `exports["./client"]`
+# bundle through it.
+- insert:
+    - id: draft
+      name: dsh-draft
