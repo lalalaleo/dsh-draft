@@ -113,7 +113,7 @@ const sel = (r) => `${r.anchor}:${r.head}`
 {
   // toggleWrap — bold
   let r = toggleWrap('abc', 1, 2, '**')
-  check('wrap selection', applyChanges('abc', r) === 'a**b**c' && sel(r) === '1:2')
+  check('wrap selection', applyChanges('abc', r) === 'a**b**c' && sel(r) === '3:4')
   r = toggleWrap('a**b**c', 3, 4, '**')
   check('unwrap enclosed selection', applyChanges('a**b**c', r) === 'abc' && sel(r) === '1:2')
   r = toggleWrap('ab', 1, 1, '**')
@@ -121,13 +121,19 @@ const sel = (r) => `${r.anchor}:${r.head}`
   check('caret inserts empty pair', t === 'a****b' && sel(r) === '3:3' && t.slice(1, 3) === '**' && t.slice(3, 5) === '**')
   // toggleWrap — italic (single asterisk)
   r = toggleWrap('ab', 0, 1, '*')
-  check('italic wrap', applyChanges('ab', r) === '*a*b' && sel(r) === '0:1')
+  check('italic wrap', applyChanges('ab', r) === '*a*b' && sel(r) === '1:2')
   r = toggleWrap('*a*b', 1, 2, '*')
   check('italic unwrap', applyChanges('*a*b', r) === 'ab' && sel(r) === '0:1')
   // unwrap only fires when both markers sit exactly on the flanks;
   // a selection starting at 0 (no room for an opening flank) wraps instead
   r = toggleWrap('**a**', 0, 5, '**')
   check('selection at doc start wraps', applyChanges('**a**', r) === '****a****')
+  check('selection at doc start maps into content', sel(r) === '2:7')
+  // reverse (backward) selections keep their direction and map onto content
+  r = toggleWrap('ab', 2, 0, '**')
+  check('reverse wrap', applyChanges('ab', r) === '**ab**' && sel(r) === '4:2')
+  r = toggleWrap('**ab**', 4, 2, '**')
+  check('reverse unwrap', applyChanges('**ab**', r) === 'ab' && sel(r) === '2:0')
 }
 
 {
@@ -145,10 +151,10 @@ const sel = (r) => `${r.anchor}:${r.head}`
   r = toggleTaskLines('普通段落', 0, 4)
   check('plain line → task item', applyChanges('普通段落', r) === '- [ ] 普通段落')
   r = toggleTaskLines('', 0, 0)
-  check('blank line untouched', applyChanges('', r) === '')
-  // multi-line selection rewrites each touched line, blanks preserved
+  check('blank line becomes task', applyChanges('', r) === '- [ ] ')
+  // multi-line selection rewrites each touched line, blanks included
   r = toggleTaskLines('- 甲\n\n- 乙', 0, 10)
-  check('multi-line toggle keeps blanks', applyChanges('- 甲\n\n- 乙', r) === '- [ ] 甲\n\n- [ ] 乙')
+  check('multi-line toggle includes blanks', applyChanges('- 甲\n\n- 乙', r) === '- [ ] 甲\n- [ ] \n- [ ] 乙')
   // caret-only on a list line still toggles that line
   r = toggleTaskLines('- 甲\n- 乙', 6, 6) // caret on the second line
   check('caret-only toggles its line', applyChanges('- 甲\n- 乙', r) === '- 甲\n- [ ] 乙')

@@ -17,6 +17,7 @@
 
 - **Live Preview** —— 边输入边渲染，Markdown 始终是真实可编辑的文档。
 - **本地持久化** —— 自动保存到 `$DSH_HOME/draft.md`（默认 `~/.dsh/draft.md`），刷新、重启都不丢。
+- **格式快捷键** —— `Mod-B` / `Ctrl-B` 切换**加粗**，`Mod-I` / `Ctrl-I` 切换*斜体*，`Mod-L` / `Ctrl-L` 切换任务框；再按一次取消。
 
 ## 安装
 
@@ -31,6 +32,8 @@ dsh plugin --profile <profile> add dsh-draft
 ## 使用
 
 打开右侧 better-sidebar，点击标签栏「+」，选择 **草稿**，开始输入。
+
+写作用键盘为主：选中文字后按 `Ctrl/Cmd+B`（加粗）或 `Ctrl/Cmd+I`（斜体）包裹——再按一次取消。列表行上按 `Ctrl/Cmd+L` 切换任务框（`[ ]` ⇄ `[x]`；普通行会自动变成任务项）。嵌套列表续行缩进 4 个空格。
 
 ## 参与
 

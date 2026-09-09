@@ -56,11 +56,27 @@ const CODE_LANGUAGES = ATOMIC_CODE_LANGUAGES
 
 function runToggleWrap(marker) {
   return (view) => {
-    const { from, to } = view.state.selection.main
-    const r = toggleWrap(view.state.doc.toString(), from, to, marker)
+    const { anchor, head } = view.state.selection.main
+    const r = toggleWrap(view.state.doc.toString(), anchor, head, marker)
     view.dispatch({ changes: r.changes, selection: { anchor: r.anchor, head: r.head }, scrollIntoView: true })
     return true
   }
+}
+
+/** Enter inside a list item (caret in the middle of the line) splits the
+ *  line with a 4-space indent — the markdown language's built-in
+ *  continuation indents by the marker width (2 for `- `), which reads too
+ *  tight. Line-end Enter (new sibling item) and everything else are left
+ *  to the default keymap (return false). */
+const runEnterInList = (view) => {
+  const { state } = view
+  const sel = state.selection.main
+  if (!sel.empty) return false
+  const line = state.doc.lineAt(sel.from)
+  if (!/^(\s*)(?:[-+*]|\d+[.)])(\s+)/.exec(line.text)) return false
+  if (sel.from >= line.to) return false // line end → default: new sibling item
+  view.dispatch({ changes: { from: sel.from, insert: '\n    ' }, scrollIntoView: true })
+  return true
 }
 
 const runToggleTask = (view) => {
@@ -77,8 +93,9 @@ const EDITOR_EXTENSIONS = [
     { key: 'Mod-b', run: runToggleWrap('**') },
     { key: 'Mod-i', run: runToggleWrap('*') },
     { key: 'Mod-l', run: runToggleTask },
+    { key: 'Enter', run: runEnterInList },
   ])),
-  indentUnit.of('    '), // 4-space indent (list continuation etc.)
+  indentUnit.of('    '), // 4-space indent (Tab, code blocks, etc.)
 ]
 
 const MIRROR_KEY = 'dsh-draft.mirror.v4'
@@ -224,10 +241,10 @@ const EDITOR_CSS = `
 
 /* ── breathing room: widen the reading column's horizontal + vertical
       padding (atomic ships 0.5rem inline which hugs the panel edges).
-      Bottom padding is tall (35vh) so a long document can scroll the
+      Bottom padding is tall (40vh) so a long document can scroll the
       last line to the middle of the screen instead of pinning it to
       the status bar ─ */
-.dsh-draft .atomic-cm-editor .cm-content { padding: 1rem 1rem 35vh; }
+.dsh-draft .atomic-cm-editor .cm-content { padding: 1rem 1rem 40vh; }
 
 /* ── per-level heading look (sizes, colors, h2 underline) ──────────── */
 .dsh-draft .cm-line.cm-atomic-h1 { font-size: 1.7rem; color: var(--draft-h1); font-weight: 700; }

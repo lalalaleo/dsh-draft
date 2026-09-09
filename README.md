@@ -17,6 +17,7 @@
 
 - **Live Preview** — what you type is rendered as you type; the Markdown stays the real, editable document.
 - **Local persistence** — autosaved to `$DSH_HOME/draft.md` (default `~/.dsh/draft.md`), safe across refreshes and restarts.
+- **Formatting shortcuts** — `Mod-B` / `Ctrl-B` toggles **bold**, `Mod-I` / `Ctrl-I` toggles *italic*, `Mod-L` / `Ctrl-L` toggles a task checkbox. Toggle means pressing the same key again removes it.
 
 ## Installation
 
@@ -31,6 +32,8 @@ Replace `<profile>` with your profile name (the default web profile is `web`). Y
 ## Usage
 
 Open the right sidebar, click "+" in its tab bar, and pick **Draft / 草稿** — start typing.
+
+Formatting is keyboard-first: select text and press `Ctrl/Cmd+B` (bold) or `Ctrl/Cmd+I` (italic) to wrap it — press again to unwrap. `Ctrl/Cmd+L` on a list line toggles its task checkbox (checked ⇄ unchecked; a plain line becomes a task). Nested list continuation indents with 4 spaces.
 
 ## Participation
 
