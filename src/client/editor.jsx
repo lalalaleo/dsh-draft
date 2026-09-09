@@ -306,7 +306,7 @@ const EDITOR_CSS = `
 
 /* ── task checkbox: keep breathing room after the box even on lines
       with no text (atomic ships 0.31em right margin — on a bare
-      `- [ ]` line the caret visually touches the box border) ─ */
+      "- [ ]" line the caret visually touches the box border) ─ */
 .dsh-draft .cm-atomic-task-checkbox { margin-right: 0.55em; }
 
 /* ── status bar ───────────────────────────────────────────────────── */
