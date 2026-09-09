@@ -321,7 +321,9 @@ const EDITOR_CSS = `
   width: 1.05em; height: 1.05em; box-sizing: border-box;
   border: 1.5px solid var(--atomic-editor-fg-muted, #888);
   border-radius: 0.22em;
-  transform: translateY(-0.04em);
+  /* no translate: the input itself already carries the package's
+     translateY(-0.04em) alignment — adding one here double-shifts
+     the box above the text line */
 }
 .dsh-draft .cm-atomic-task-checkbox:checked::before {
   background: var(--atomic-editor-accent, #7c3aed);
