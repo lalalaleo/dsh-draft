@@ -16,6 +16,23 @@
 
 const TASK_LINE = /^(\s*(?:[-+*]|\d+[.)])\s+)(\[[ xX]\]\s+)?(.*)$/
 const TASK_CHECKBOX = /^\[([ xX])\]\s+$/
+const LIST_PREFIX = /^(\s*)(?:[-+*]|\d+[.)])(\s+)/
+
+/** Identify a markdown list line: returns { indent } (leading spaces)
+ *  or null for non-list lines. Shared by the task toggle and the
+ *  Enter/Tab keymaps. */
+export function listIndentOf(line) {
+  const m = LIST_PREFIX.exec(line)
+  return m ? { indent: m[1].length } : null
+}
+
+/** Next/previous list nesting level, 4 spaces per level. */
+export function nextIndentLevel(indent) {
+  return 4 * (Math.floor(indent / 4) + 1)
+}
+export function prevIndentLevel(indent) {
+  return Math.max(0, 4 * (Math.ceil(indent / 4) - 1))
+}
 
 /** Map a caret/selection position through a wrap or unwrap of `marker`
  *  around [from, to): the doc shrinks/grows by `m` at the two flanks,

@@ -30,7 +30,7 @@ import { keymap } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { indentUnit } from '@codemirror/language'
 import { t } from './i18n.js'
-import { toggleWrap, toggleTaskLines } from './markdown-ops.js'
+import { toggleWrap, toggleTaskLines, listIndentOf, nextIndentLevel, prevIndentLevel } from './markdown-ops.js'
 
 /**
  * Syntax highlighting for fenced code blocks. The atomic editor ships the
@@ -66,16 +66,43 @@ function runToggleWrap(marker) {
 /** Enter inside a list item (caret in the middle of the line) splits the
  *  line with a 4-space indent — the markdown language's built-in
  *  continuation indents by the marker width (2 for `- `), which reads too
- *  tight. Line-end Enter (new sibling item) and everything else are left
- *  to the default keymap (return false). */
+ *  tight. Line-end Enter (new sibling item), empty-item Enter (exit the
+ *  list) and everything else are left to the default keymap. */
 const runEnterInList = (view) => {
   const { state } = view
   const sel = state.selection.main
   if (!sel.empty) return false
   const line = state.doc.lineAt(sel.from)
-  if (!/^(\s*)(?:[-+*]|\d+[.)])(\s+)/.exec(line.text)) return false
+  if (!listIndentOf(line.text)) return false
   if (sel.from >= line.to) return false // line end → default: new sibling item
   view.dispatch({ changes: { from: sel.from, insert: '\n    ' }, scrollIntoView: true })
+  return true
+}
+
+/** Tab / Shift-Tab on list lines: step the line's leading indent up/down
+ *  one level (4 spaces per level) when the caret sits in the indent zone,
+ *  insert 4 spaces when typing inside the content. Non-list lines and
+ *  multi-caret selections fall through to the default Tab handling. */
+const runListTab = (view, shift) => {
+  const { state } = view
+  const sel = state.selection.main
+  if (!sel.empty) return false
+  const line = state.doc.lineAt(sel.from)
+  const item = listIndentOf(line.text)
+  if (!item) return false
+  const col = sel.from - line.from
+  if (col <= item.indent) {
+    const target = shift ? prevIndentLevel(item.indent) : nextIndentLevel(item.indent)
+    if (target === item.indent) return true
+    view.dispatch({
+      changes: { from: line.from, to: line.from + item.indent, insert: ' '.repeat(target) },
+      selection: { anchor: line.from + target, head: line.from + target },
+      scrollIntoView: true,
+    })
+    return true
+  }
+  if (shift) return false // inside content — let the default Shift-Tab run
+  view.dispatch(state.replaceSelection('    '))
   return true
 }
 
@@ -94,8 +121,10 @@ const EDITOR_EXTENSIONS = [
     { key: 'Mod-i', run: runToggleWrap('*') },
     { key: 'Mod-l', run: runToggleTask },
     { key: 'Enter', run: runEnterInList },
+    { key: 'Tab', run: (v) => runListTab(v, false) },
+    { key: 'Shift-Tab', run: (v) => runListTab(v, true) },
   ])),
-  indentUnit.of('    '), // 4-space indent (Tab, code blocks, etc.)
+  indentUnit.of('    '), // 4-space indent (code blocks, etc.)
 ]
 
 const MIRROR_KEY = 'dsh-draft.mirror.v4'
@@ -274,6 +303,11 @@ const EDITOR_CSS = `
 .dsh-draft .cm-line.cm-atomic-fenced-code {
   background: var(--draft-codeblock-bg);
 }
+
+/* ── task checkbox: keep breathing room after the box even on lines
+      with no text (atomic ships 0.31em right margin — on a bare
+      `- [ ]` line the caret visually touches the box border) ─ */
+.dsh-draft .cm-atomic-task-checkbox { margin-right: 0.55em; }
 
 /* ── status bar ───────────────────────────────────────────────────── */
 .dsh-draft-status {
