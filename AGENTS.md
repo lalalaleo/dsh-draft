@@ -2,7 +2,7 @@
 
 给任何接手/参与本项目的 **dsh agent 会话**的工作手册。本项目由 dsh agent 端到端开发与维护；未来的协作者也应通过自己的 dsh 会话、借助本文件**无缝切入**（不会有真人开发者直接参与写代码）。请先通读本文件再动手。
 
-本文只收录**稳定的事实与规则**；`请勿轻易推翻`——若确需推翻，先证明新方案能覆盖被替代方案解决的全部问题。**会变的内容**（工程现状、构建/调试细节、踩坑、发布 SOP、会话记忆、变更记录）在 `.dsh/` 目录（见 §5 索引），不放在本文。
+本文只收录**稳定的事实与规则**；`请勿轻易推翻`——若确需推翻，先证明新方案能覆盖被替代方案解决的全部问题。**会变的内容**（工程现状、构建/调试细节、踩坑、发布 SOP、会话记忆、变更记录）在 `.dsh/` 目录（见 §6 索引），不放在本文。
 
 ---
 
@@ -28,6 +28,8 @@
 ```
 dsh-draft/
 ├── package.json        # dsh.bundle.patch + dsh.client.platform=web + exports["./client"] + 全量 devDependencies
+├── package-lock.json   # 入库（CI 的 npm ci 可复现；npm 发布自动排除，不进包）
+├── .github/workflows/  # ci.yml（PR/push 构建+测试）、release.yml（v* tag 自动 npm publish，幂等）
 ├── cordis.patch.yml    # bundle 补丁行：- insert: { id: draft, name: dsh-draft }
 ├── README.md           # 用户手册（EN 主 + 徽章）
 ├── README.zh-CN.md     # 中文版 README（互链）
@@ -47,7 +49,15 @@ dsh-draft/
 └── node_modules/       # 构建期依赖（不入库）
 ```
 
-## 4. 基本架构与运行逻辑（DSH 插件双面协议）
+## 4. Git 工作流与发布规则
+
+- **分支模型（M2）**：功能/修复一律走 `feat/<短名>` / `fix/<短名>` / `chore/<短名>` 分支 + 自提 PR；文档/文案小修可直推 main。合并用 **squash merge**（main 保持线性——一条 PR 一条 commit）。
+- **提交信息**：Conventional Commits（`feat:` / `fix:` / `chore:` / `docs:` / `refactor:`）。
+- **PR**：agent 自提（通道现状见 `.dsh/MEMORY.md`），标题一句话、描述列变更点与验收要点；CI 在 PR 上全跑（build+test），红了不合并。
+- **发布**：0.x 阶段 patch=修复、minor=功能。`package.json` bump + CHANGELOG 后打 **annotated tag** `vX.Y.Z` 并推送——`release.yml` 自动 `npm publish`（幂等：版本已存在则跳过，补打旧 tag 安全）。
+- **lockfile**：`package-lock.json` 入库（CI 的 `npm ci` 可复现 + 依赖缓存）；npm 发布自动排除 lockfile，提交它不影响包内容。
+
+## 5. 基本架构与运行逻辑（DSH 插件双面协议）
 
 - **host 面（Node）**：`exports "."` → `lib/index.js`。Cordis 插件**具名导出** `{ name, inject, apply }`（无 default export）；`apply(ctx)` 里注册路由/服务。
 - **client 面（浏览器）**：`package.json` 声明 `"dsh": { "client": { "platform": "web", ... }, "bundle": { "patch": "./cordis.patch.yml" } }`，且 `exports["./client"]` 指向 `lib/client.js`。
@@ -57,7 +67,7 @@ dsh-draft/
 - **平台模块**（`react`、`react-dom/client`、`react/jsx-runtime`）由浏览器 loader 提供——**打包时 external**；其余依赖（CM6 等）打进 bundle。
 - **语言**：dsh 生态为 en/zh。Tab 标题经 `ctx.locale`（宿主偏好，实时；未注入时降级浏览器语言——inject 门控见 DEVELOPMENT.md §7）；组件文案按文档/浏览器语言（见 `src/client/i18n.js`）。
 
-## 5. 重要文档索引
+## 6. 重要文档索引
 
 | 文档 | 读者 | 内容 |
 |---|---|---|
@@ -66,12 +76,12 @@ dsh-draft/
 | `DEVELOPMENT.md` | 开发中的 agent | 工程现状、构建、测试、挂载、调试、踩坑 |
 | `CHANGELOG.md` | 用户/维护 | 版本变更记录 |
 | `.dsh/RELEASING.md`（私有） | 发布 agent | 发布/收录 SOP |
-| `.dsh/MEMORY.md`（私有） | 跨会话 | 条目化记忆（规则见 §6） |
+| `.dsh/MEMORY.md`（私有） | 跨会话 | 条目化记忆（规则见 §7） |
 | `CREDITS.md` | 合规 | 第三方致谢 |
 
 ---
 
-## 6. 记忆机制（.dsh/MEMORY.md）
+## 7. 记忆机制（.dsh/MEMORY.md）
 
 私有条目化记忆，用于跨会话传递**差量**信息（正式文档与板上是真相源，记忆只记"别处没有的"）。
 

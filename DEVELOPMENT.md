@@ -4,7 +4,8 @@
 
 ## 1. 工程现状
 
-- 版本：0.1.0（待发布）。能力：Live Preview 编辑（标题/列表/任务框/表格/引用/链接/代码围栏高亮）、自动落盘、明暗跟随宿主、简单 en/zh i18n。
+- 版本：0.1.0（已发布：npm 2026-09-08T18:55Z）。能力：Live Preview 编辑（标题/列表/任务框/表格/引用/链接/代码围栏高亮）、自动落盘、明暗跟随宿主、简单 en/zh i18n。
+- **CI**（GitHub Actions，`.github/workflows/`）：`ci.yml` 在 PR/push 上全跑 `npm ci --legacy-peer-deps` + build + test；`release.yml` 在 `v*` tag 上自动 npm publish（幂等：版本已存在则跳过，补打旧 tag 安全。规则见 AGENTS §4）。`package-lock.json` 已入库（`npm ci` 依赖；npm 发布自动排除该文件，不进包）。
 - **编辑器（当前实现）**：`@atomic-editor/editor`（MIT, kenforthewin/atomic-editor）——实现可替换，范式见 AGENTS §2。**不要**回到手写 `width:0` 隐藏 + widget（结构性 bug，见 §7）。
 - **样式映射**：库读 `--atomic-editor-*` 变量；`.dsh-draft.light/.dark .atomic-cm-editor` 上重映射到 `--draft-*`（light/dark 各一套）；标题按级覆盖（h2 下划线）、引用绿 rail、行内代码底色。
 - **语法高亮**：`CODE_LANGUAGES = ATOMIC_CODE_LANGUAGES`（约 20 种：JS/TS/Python/Go/Rust/C/C++/Java/PHP/Swift/Shell/SQL/HTML/CSS/XML/JSON/YAML/TOML/Dockerfile/Markdown），引用必须稳定（模块级常量）；`--draft-hl-*` 双套调色板 + `--draft-codeblock-bg` 打底。加语言：`npm install --save-dev --legacy-peer-deps --no-audit --no-fund @codemirror/lang-<x>`，再改 code-languages 清单或传自建 `LanguageDescription[]`。

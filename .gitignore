@@ -13,9 +13,5 @@ lib/client.js
 # local project kanban board state (workspace tool artifact)
 .dsh-kanban.json
 
-# lockfile: install flow is documented (`npm install --legacy-peer-deps`),
-# the plugin ships no lockfile
-package-lock.json
-
 # .dsh/: private/internal docs (release SOP, session memory) — never tracked
 .dsh/

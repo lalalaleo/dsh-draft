@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npm run build
+      - run: npm test
+      - name: Gate — package.json version must match the tag
+        run: |
+          V="$(node -p "require('./package.json').version")"
+          T="${GITHUB_REF_NAME#v}"
+          test "$V" = "$T" || { echo "package.json version $V != tag $T"; exit 1; }
+      - name: Gate — idempotent (skip if this version is already published)
+        run: |
+          V="$(node -p "require('./package.json').version")"
+          if npm view "dsh-draft@${V}" version >/dev/null 2>&1; then
+            echo "dsh-draft@${V} already published — skipping publish (safe for backfilled tags)"
+          else
+            echo "proceed" > /tmp/dsh-publish-ok
+          fi
+      - name: Publish to npm
+        if: hashFiles('/tmp/dsh-publish-ok') != ''
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Verify dist-tag
+        run: |
+          V="$(node -p "require('./package.json').version")"
+          npm view dsh-draft dist-tags --json | grep -q "\"latest\": \"${V}\"" && echo "latest -> ${V} OK"
