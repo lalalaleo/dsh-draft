@@ -305,40 +305,37 @@ const EDITOR_CSS = `
       bare "- [ ]" line shows the caret clear of the box. (A pure
       margin-right is NOT measured by CM6's widget layout — the caret
       still touches the border on textless lines, and the package also
-      swallows the trailing space after the checkbox.) The visual box is
-      drawn by a ::before limited to the left 1.05em; the rest of the
-      1.6em width is the checkbox's own spacing, so text and caret both
-      start after it. ─ */
+      swallows the trailing space after the checkbox.)
+      Layout rules the package relies on (display: inline-grid,
+      vertical-align, the translateY hop) are left untouched so the
+      baseline stays identical to stock; only the box width grows to
+      1.6em as a placeholder. The visual box is drawn by a ::before
+      limited to the left 1.05em; the checkmark stays a grid child
+      (preserving the package's line placement) and is nudged back to
+      the visual centre with a translateX compensation. ─ */
 .dsh-draft .cm-atomic-task-checkbox {
   width: 1.6em; height: 1.05em;
   margin: 0 0 0 -0.16em;
   border: none; background: transparent;
-  position: relative; display: inline-block;
-  box-sizing: border-box;
+  position: relative;
+  /* display / vertical-align / transform: inherited from the package */
 }
 .dsh-draft .cm-atomic-task-checkbox::before {
   content: ""; position: absolute; left: 0; top: 0;
   width: 1.05em; height: 1.05em; box-sizing: border-box;
   border: 1.5px solid var(--atomic-editor-fg-muted, #888);
   border-radius: 0.22em;
-  /* no translate: the input itself already carries the package's
-     translateY(-0.04em) alignment — adding one here double-shifts
-     the box above the text line */
 }
 .dsh-draft .cm-atomic-task-checkbox:checked::before {
   background: var(--atomic-editor-accent, #7c3aed);
   border-color: var(--atomic-editor-accent, #7c3aed);
 }
 .dsh-draft .cm-atomic-task-checkbox::after {
-  content: ""; position: absolute;
-  left: 0.395em; top: 0.26em;
-  width: 0.26em; height: 0.5em; box-sizing: border-box;
-  border-right: 0.12em solid #fff;
-  border-bottom: 0.12em solid #fff;
-  transform: rotate(45deg);
-  opacity: 0;
+  /* grid child as in the package: centred in the widened box, then
+     pulled back over the visual box centre; rotate/translate order
+     mirrors the stock checkmark */
+  transform: translateX(-0.275em) rotate(45deg) translate(-0.03em, -0.04em);
 }
-.dsh-draft .cm-atomic-task-checkbox:checked::after { opacity: 1; }
 .dsh-draft .cm-atomic-task-checkbox:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--draft-accent) 28%, transparent 72%);
