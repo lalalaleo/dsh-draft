@@ -301,10 +301,46 @@ const EDITOR_CSS = `
   background: var(--draft-codeblock-bg);
 }
 
-/* ── task checkbox: keep breathing room after the box even on lines
-      with no text (atomic ships 0.31em right margin — on a bare
-      "- [ ]" line the caret visually touches the box border) ─ */
-.dsh-draft .cm-atomic-task-checkbox { margin-right: 0.55em; }
+/* ── task checkbox: the widget owns a right-side breathing zone so a
+      bare "- [ ]" line shows the caret clear of the box. (A pure
+      margin-right is NOT measured by CM6's widget layout — the caret
+      still touches the border on textless lines, and the package also
+      swallows the trailing space after the checkbox.) The visual box is
+      drawn by a ::before limited to the left 1.05em; the rest of the
+      1.6em width is the checkbox's own spacing, so text and caret both
+      start after it. ─ */
+.dsh-draft .cm-atomic-task-checkbox {
+  width: 1.6em; height: 1.05em;
+  margin: 0 0 0 -0.16em;
+  border: none; background: transparent;
+  position: relative; display: inline-block;
+  box-sizing: border-box;
+}
+.dsh-draft .cm-atomic-task-checkbox::before {
+  content: ""; position: absolute; left: 0; top: 0;
+  width: 1.05em; height: 1.05em; box-sizing: border-box;
+  border: 1.5px solid var(--atomic-editor-fg-muted, #888);
+  border-radius: 0.22em;
+  transform: translateY(-0.04em);
+}
+.dsh-draft .cm-atomic-task-checkbox:checked::before {
+  background: var(--atomic-editor-accent, #7c3aed);
+  border-color: var(--atomic-editor-accent, #7c3aed);
+}
+.dsh-draft .cm-atomic-task-checkbox::after {
+  content: ""; position: absolute;
+  left: 0.395em; top: 0.26em;
+  width: 0.26em; height: 0.5em; box-sizing: border-box;
+  border-right: 0.12em solid #fff;
+  border-bottom: 0.12em solid #fff;
+  transform: rotate(45deg);
+  opacity: 0;
+}
+.dsh-draft .cm-atomic-task-checkbox:checked::after { opacity: 1; }
+.dsh-draft .cm-atomic-task-checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--draft-accent) 28%, transparent 72%);
+}
 
 /* ── status bar ───────────────────────────────────────────────────── */
 .dsh-draft-status {
