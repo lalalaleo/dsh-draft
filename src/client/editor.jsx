@@ -140,22 +140,33 @@ function buildListLevels(state) {
     for (let ch = node.firstChild; ch; ch = ch.nextSibling) collect(ch, depth)
   }
   collect(tree.topNode, 0)
+  // Nested items overlap: an outer item owns the inner item's lines too.
+  // Keep one decoration per line — the DEEPEST nesting depth wins — and
+  // add them sorted by `from` (RangeSetBuilder requires that, plus a
+  // stable startSide; duplicating a line breaks both).
+  const depthByLine = new Map() // line number -> max depth
   for (const it of items) {
     const first = doc.lineAt(it.from).number
     const last = doc.lineAt(it.to).number
     for (let n = first; n <= last; n++) {
-      const line = doc.line(n)
-      if (!line.text.trim()) continue
-      const padding = LV_BASE + LV_ALCOVE + it.depth * LV_LEVEL
-      const markerLine = n === first
-      builder.add(
-        line.from,
-        line.from + 1,
-        Decoration.line({
-          attributes: { style: `padding-left: ${padding}em; text-indent: ${markerLine ? `-${LV_ALCOVE}em` : '0em'}` },
-        }),
-      )
+      if (!doc.line(n).text.trim()) continue
+      const prev = depthByLine.get(n)
+      if (prev === undefined || it.depth > prev) depthByLine.set(n, it.depth)
     }
+  }
+  const markerLine = /^(\s*)(?:[-+*]|\d+[.)])(\s+)/
+  for (const n of [...depthByLine.keys()].sort((a, b) => a - b)) {
+    const line = doc.line(n)
+    const padding = LV_BASE + LV_ALCOVE + depthByLine.get(n) * LV_LEVEL
+    builder.add(
+      line.from,
+      line.from + 1,
+      Decoration.line({
+        attributes: {
+          style: `padding-left: ${padding}em; text-indent: ${markerLine.test(line.text) ? `-${LV_ALCOVE}em` : '0em'}`,
+        },
+      }),
+    )
   }
   return builder.finish()
 }
