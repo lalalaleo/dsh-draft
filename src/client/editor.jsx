@@ -26,7 +26,11 @@ import { useEffect, useRef, useState } from 'react'
 import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
 import { ATOMIC_CODE_LANGUAGES } from '@atomic-editor/editor/code-languages'
 import atomicStyles from '@atomic-editor/editor/styles.css'
+import { keymap } from '@codemirror/view'
+import { Prec } from '@codemirror/state'
+import { indentUnit } from '@codemirror/language'
 import { t } from './i18n.js'
+import { toggleWrap, toggleTaskLines } from './markdown-ops.js'
 
 /**
  * Syntax highlighting for fenced code blocks. The atomic editor ships the
@@ -38,6 +42,44 @@ import { t } from './i18n.js'
  * use. The reference must be stable across renders or the editor remounts.
  */
 const CODE_LANGUAGES = ATOMIC_CODE_LANGUAGES
+
+/* ─────────────────── formatting shortcuts (Mod-b/i/l) ───────────────────
+ * Toggle-style formatting keys: `**bold**`, `*italic*`, GFM task checkboxes.
+ * The wrap/task transforms live in markdown-ops.js as pure functions
+ * (unit-tested in scripts/test.mjs); these thin commands translate the
+ * result into a CM6 transaction.
+ *
+ * The keymap is wrapped in Prec.high so it beats the package's built-in
+ * default keymap (the component's documented pattern for custom keys),
+ * and the whole array is a module-level constant — the component captures
+ * `extensions` once at mount and a changing reference would remount. */
+
+function runToggleWrap(marker) {
+  return (view) => {
+    const { from, to } = view.state.selection.main
+    const r = toggleWrap(view.state.doc.toString(), from, to, marker)
+    view.dispatch({ changes: r.changes, selection: { anchor: r.anchor, head: r.head }, scrollIntoView: true })
+    return true
+  }
+}
+
+const runToggleTask = (view) => {
+  const { from, to } = view.state.selection.main
+  const r = toggleTaskLines(view.state.doc.toString(), from, to)
+  if (r.changes.length) {
+    view.dispatch({ changes: r.changes, selection: { anchor: r.anchor, head: r.head }, scrollIntoView: true })
+  }
+  return true // handled either way — don't let the browser swallow Mod-l
+}
+
+const EDITOR_EXTENSIONS = [
+  Prec.high(keymap.of([
+    { key: 'Mod-b', run: runToggleWrap('**') },
+    { key: 'Mod-i', run: runToggleWrap('*') },
+    { key: 'Mod-l', run: runToggleTask },
+  ])),
+  indentUnit.of('    '), // 4-space indent (list continuation etc.)
+]
 
 const MIRROR_KEY = 'dsh-draft.mirror.v4'
 
@@ -181,8 +223,11 @@ const EDITOR_CSS = `
 }
 
 /* ── breathing room: widen the reading column's horizontal + vertical
-      padding (atomic ships 0.5rem inline which hugs the panel edges) ─ */
-.dsh-draft .atomic-cm-editor .cm-content { padding-inline: 1rem; padding-block: 1rem; }
+      padding (atomic ships 0.5rem inline which hugs the panel edges).
+      Bottom padding is tall (35vh) so a long document can scroll the
+      last line to the middle of the screen instead of pinning it to
+      the status bar ─ */
+.dsh-draft .atomic-cm-editor .cm-content { padding: 1rem 1rem 35vh; }
 
 /* ── per-level heading look (sizes, colors, h2 underline) ──────────── */
 .dsh-draft .cm-line.cm-atomic-h1 { font-size: 1.7rem; color: var(--draft-h1); font-weight: 700; }
@@ -355,6 +400,7 @@ export function ScratchpadTab() {
             markdownSource={initialMd}
             onMarkdownChange={handleChange}
             codeLanguages={CODE_LANGUAGES}
+            extensions={EDITOR_EXTENSIONS}
             blurEditorOnMount
           />
         )}

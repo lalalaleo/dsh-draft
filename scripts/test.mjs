@@ -74,13 +74,8 @@ check('nested bold+italic', serializeInline(parseInline('**粗 *斜* 体**')) ==
   }
 }
 
-if (failures === 0) {
-  console.log('\ncodec: all tests passed')
-  process.exit(0)
-} else {
-  console.error(`\ncodec: ${failures} test(s) failed`)
-  process.exit(1)
-}
+// NOTE: no process.exit here — later sections (inline tokens, markdown-ops)
+// must run too; the suite exits once at the end of the file.
 
 // ─── live inline-token helpers ───
 import { inlineTokens, caretInMarker, caretDisplacement } from '../src/codec.js'
@@ -99,4 +94,73 @@ import { inlineTokens, caretInMarker, caretDisplacement } from '../src/codec.js'
   check('caret in opening marker', caretInMarker(1, boldToks) === true)
   check('caret in closing marker', caretInMarker(5, boldToks) === true)
   check('caret in content safe', caretInMarker(3, boldToks) === false)
+}
+
+// ─── editor formatting helpers (markdown-ops.js) ───
+import { toggleWrap, toggleTaskLines } from '../src/client/markdown-ops.js'
+
+function applyChanges(text, r) {
+  let out = ''
+  let pos = 0
+  for (const c of r.changes) {
+    out += text.slice(pos, c.from) + c.insert
+    pos = c.to
+  }
+  return out + text.slice(pos)
+}
+const sel = (r) => `${r.anchor}:${r.head}`
+
+{
+  // toggleWrap — bold
+  let r = toggleWrap('abc', 1, 2, '**')
+  check('wrap selection', applyChanges('abc', r) === 'a**b**c' && sel(r) === '1:2')
+  r = toggleWrap('a**b**c', 3, 4, '**')
+  check('unwrap enclosed selection', applyChanges('a**b**c', r) === 'abc' && sel(r) === '1:2')
+  r = toggleWrap('ab', 1, 1, '**')
+  const t = applyChanges('ab', r)
+  check('caret inserts empty pair', t === 'a****b' && sel(r) === '3:3' && t.slice(1, 3) === '**' && t.slice(3, 5) === '**')
+  // toggleWrap — italic (single asterisk)
+  r = toggleWrap('ab', 0, 1, '*')
+  check('italic wrap', applyChanges('ab', r) === '*a*b' && sel(r) === '0:1')
+  r = toggleWrap('*a*b', 1, 2, '*')
+  check('italic unwrap', applyChanges('*a*b', r) === 'ab' && sel(r) === '0:1')
+  // unwrap only fires when both markers sit exactly on the flanks;
+  // a selection starting at 0 (no room for an opening flank) wraps instead
+  r = toggleWrap('**a**', 0, 5, '**')
+  check('selection at doc start wraps', applyChanges('**a**', r) === '****a****')
+}
+
+{
+  // toggleTaskLines — single lines
+  let r = toggleTaskLines('- 买菜', 0, 4)
+  check('plain list → task', applyChanges('- 买菜', r) === '- [ ] 买菜')
+  r = toggleTaskLines('- [ ] 买菜', 0, 9)
+  check('unchecked → checked', applyChanges('- [ ] 买菜', r) === '- [x] 买菜')
+  r = toggleTaskLines('- [x] 买菜', 0, 9)
+  check('checked → unchecked', applyChanges('- [x] 买菜', r) === '- [ ] 买菜')
+  r = toggleTaskLines('- [X] 买菜', 0, 9)
+  check('capital X → unchecked', applyChanges('- [X] 买菜', r) === '- [ ] 买菜')
+  r = toggleTaskLines('1. 甲', 0, 4)
+  check('ordered item → task', applyChanges('1. 甲', r) === '1. [ ] 甲')
+  r = toggleTaskLines('普通段落', 0, 4)
+  check('plain line → task item', applyChanges('普通段落', r) === '- [ ] 普通段落')
+  r = toggleTaskLines('', 0, 0)
+  check('blank line untouched', applyChanges('', r) === '')
+  // multi-line selection rewrites each touched line, blanks preserved
+  r = toggleTaskLines('- 甲\n\n- 乙', 0, 10)
+  check('multi-line toggle keeps blanks', applyChanges('- 甲\n\n- 乙', r) === '- [ ] 甲\n\n- [ ] 乙')
+  // caret-only on a list line still toggles that line
+  r = toggleTaskLines('- 甲\n- 乙', 6, 6) // caret on the second line
+  check('caret-only toggles its line', applyChanges('- 甲\n- 乙', r) === '- 甲\n- [ ] 乙')
+  // selection remap: anchor/head stay on the same visual lines
+  r = toggleTaskLines('- 甲\n- 乙', 0, 6)
+  check('multi-line selection remapped', applyChanges('- 甲\n- 乙', r) === '- [ ] 甲\n- [ ] 乙' && sel(r) === '0:14')
+}
+
+if (failures === 0) {
+  console.log('\nall tests passed')
+  process.exit(0)
+} else {
+  console.error(`\n${failures} test(s) failed`)
+  process.exit(1)
 }
