@@ -332,7 +332,7 @@ export function serializeDoc(doc) {
 }
 
 /* ─────────────────── live inline-token helpers ───────────────────
- * Used by the editor for Obsidian-like live formatting: as soon as a
+ * Used by the editor for live inline formatting: as soon as a
  * completed token (`**x**`, `*x*`, `` `x` ``) is typed, the editor hides
  * its markers and shows the content formatted. These pure helpers map a
  * caret character offset in the raw (marker-inclusive) text to the offset
