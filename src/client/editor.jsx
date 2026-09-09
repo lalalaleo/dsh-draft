@@ -79,10 +79,11 @@ const runEnterInList = (view) => {
   return true
 }
 
-/** Tab / Shift-Tab on list lines: step the line's leading indent up/down
- *  one level (4 spaces per level) when the caret sits in the indent zone,
- *  insert 4 spaces when typing inside the content. Non-list lines and
- *  multi-caret selections fall through to the default Tab handling. */
+/** Tab / Shift-Tab on list lines: step the WHOLE line (marker included)
+ *  up/down one nesting level, 4 spaces per level — regardless of where
+ *  the caret sits on the line. This matches the editor convention
+ *  (indent the line, not insert spaces into the text). Non-list lines
+ *  and multi-caret selections fall through to the default Tab handling. */
 const runListTab = (view, shift) => {
   const { state } = view
   const sel = state.selection.main
@@ -90,19 +91,15 @@ const runListTab = (view, shift) => {
   const line = state.doc.lineAt(sel.from)
   const item = listIndentOf(line.text)
   if (!item) return false
+  const target = shift ? prevIndentLevel(item.indent) : nextIndentLevel(item.indent)
+  if (target === item.indent) return true
   const col = sel.from - line.from
-  if (col <= item.indent) {
-    const target = shift ? prevIndentLevel(item.indent) : nextIndentLevel(item.indent)
-    if (target === item.indent) return true
-    view.dispatch({
-      changes: { from: line.from, to: line.from + item.indent, insert: ' '.repeat(target) },
-      selection: { anchor: line.from + target, head: line.from + target },
-      scrollIntoView: true,
-    })
-    return true
-  }
-  if (shift) return false // inside content — let the default Shift-Tab run
-  view.dispatch(state.replaceSelection('    '))
+  const newCol = col <= item.indent ? target : col + (target - item.indent)
+  view.dispatch({
+    changes: { from: line.from, to: line.from + item.indent, insert: ' '.repeat(target) },
+    selection: { anchor: line.from + newCol, head: line.from + newCol },
+    scrollIntoView: true,
+  })
   return true
 }
 
