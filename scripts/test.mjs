@@ -150,6 +150,8 @@ const sel = (r) => `${r.anchor}:${r.head}`
   check('ordered item → task', applyChanges('1. 甲', r) === '1. [ ] 甲')
   r = toggleTaskLines('普通段落', 0, 4)
   check('plain line → task item', applyChanges('普通段落', r) === '- [ ] 普通段落')
+  r = toggleTaskLines('  嵌套段落', 0, 6)
+  check('indented line keeps indent before marker', applyChanges('  嵌套段落', r) === '  - [ ] 嵌套段落')
   r = toggleTaskLines('', 0, 0)
   check('blank line becomes task', applyChanges('', r) === '- [ ] ')
   // multi-line selection rewrites each touched line, blanks included

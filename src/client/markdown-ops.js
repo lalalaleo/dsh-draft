@@ -111,8 +111,12 @@ function lineBounds(text, pos) {
 function toggleTaskLine(line) {
   const m = TASK_LINE.exec(line)
   if (!m) {
-    // not a list line — turn it into a task item (blank lines included)
-    return line.trim() === '' ? '- [ ] ' : `- [ ] ${line}`
+    // not a list line — turn it into a task item (blank lines included).
+    // Leading indent moves BEFORE the marker so a nested/indented line
+    // keeps its nesting level instead of hanging the indent after "[ ]".
+    if (line.trim() === '') return '- [ ] '
+    const lead = /^\s*/.exec(line)[0]
+    return `${lead}- [ ] ${line.slice(lead.length)}`
   }
   const [, marker, box, rest] = m
   if (box) {
