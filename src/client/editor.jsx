@@ -26,9 +26,9 @@ import { useEffect, useRef, useState } from 'react'
 import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
 import { ATOMIC_CODE_LANGUAGES } from '@atomic-editor/editor/code-languages'
 import atomicStyles from '@atomic-editor/editor/styles.css'
-import { keymap } from '@codemirror/view'
-import { Prec } from '@codemirror/state'
-import { indentUnit } from '@codemirror/language'
+import { keymap, Decoration, EditorView } from '@codemirror/view'
+import { Prec, StateField, RangeSetBuilder } from '@codemirror/state'
+import { syntaxTree, indentUnit } from '@codemirror/language'
 import { t } from './i18n.js'
 import { toggleWrap, toggleTaskLines, listIndentOf, nextIndentLevel, prevIndentLevel } from './markdown-ops.js'
 
@@ -112,7 +112,65 @@ const runToggleTask = (view) => {
   return true // handled either way — don't let the browser swallow Mod-l
 }
 
+/* ─────────────────── list visual indent override ───────────────────
+ * The package renders list nesting with a hard-coded 0.6em per level
+ * (tree-derived; source indentation is replaced visually), which reads
+ * too tight — roughly half of a printed 4-space indent. We re-decorate
+ * the same lines with the same layout formula but a 1em/level step
+ * (≈ four spaces) after the package's decorations, so our inline styles
+ * win the cascade. Everything else (alcove, hanging indent on wrapped
+ * lines) is replicated 1:1. */
+
+const LV_BASE = 0.8 // package LIST_BASE_EM
+const LV_ALCOVE = 1.2 // package LIST_ALCOVE_EM
+const LV_LEVEL = 1 // em per nesting level — package ships 0.6
+
+function buildListLevels(state) {
+  const builder = new RangeSetBuilder()
+  const tree = syntaxTree(state)
+  const doc = state.doc
+  const items = []
+  const collect = (node, depth) => {
+    if (node.from >= doc.length) return
+    if (node.name === 'ListItem') {
+      items.push({ from: node.from, to: node.to > doc.length ? doc.length : node.to, depth })
+      for (let ch = node.firstChild; ch; ch = ch.nextSibling) collect(ch, depth + 1)
+      return
+    }
+    for (let ch = node.firstChild; ch; ch = ch.nextSibling) collect(ch, depth)
+  }
+  collect(tree.topNode, 0)
+  for (const it of items) {
+    const first = doc.lineAt(it.from).number
+    const last = doc.lineAt(it.to).number
+    for (let n = first; n <= last; n++) {
+      const line = doc.line(n)
+      if (!line.text.trim()) continue
+      const padding = LV_BASE + LV_ALCOVE + it.depth * LV_LEVEL
+      const markerLine = n === first
+      builder.add(
+        line.from,
+        line.from + 1,
+        Decoration.line({
+          attributes: { style: `padding-left: ${padding}em; text-indent: ${markerLine ? `-${LV_ALCOVE}em` : '0em'}` },
+        }),
+      )
+    }
+  }
+  return builder.finish()
+}
+
+const listLevels = StateField.define({
+  create: (state) => buildListLevels(state),
+  update(deco, tr) {
+    if (!tr.docChanged) return deco.map(tr.changes)
+    return buildListLevels(tr.state)
+  },
+  provide: (f) => EditorView.decorations.from(f),
+})
+
 const EDITOR_EXTENSIONS = [
+  listLevels,
   Prec.high(keymap.of([
     { key: 'Mod-b', run: runToggleWrap('**') },
     { key: 'Mod-i', run: runToggleWrap('*') },
