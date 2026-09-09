@@ -1,9 +1,9 @@
 /**
- * Draft editor — Obsidian-style Live Preview powered by `@atomic-editor/editor`
+ * Draft editor — live-preview editing powered by `@atomic-editor/editor`
  * (MIT, https://github.com/kenforthewin/atomic-editor).
  *
  * Why this package: it is a production-hardened CM6 editor purpose-built for
- * Obsidian-style inline live preview. Its design directly fixes the problems
+ * Inline live preview. Its design directly fixes the problems
  * we hit hand-rolling decorations:
  *   - stable line heights — inline preview hides syntax on non-active lines
  *     with replace-decorations that never change line heights (no reflow,
@@ -11,7 +11,7 @@
  *   - mouse-freeze guard — clicks don't trigger a mid-interaction decoration
  *     rebuild, eliminating cursor-offset bugs;
  *   - the raw Markdown is the source of truth; syntax shows on the current
- *     line (Obsidian's model) and tucks away when you move on;
+ *     line and tucks away when you move on;
  *   - smart lists incl. clickable task checkboxes (`- [ ]`), WYSIWYG tables,
  *     links, code fences.
  *
