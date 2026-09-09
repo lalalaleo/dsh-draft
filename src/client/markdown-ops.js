@@ -17,16 +17,35 @@
 const TASK_LINE = /^(\s*(?:[-+*]|\d+[.)])\s+)(\[[ xX]\]\s+)?(.*)$/
 const TASK_CHECKBOX = /^\[([ xX])\]\s+$/
 
+/** Map a caret/selection position through a wrap or unwrap of `marker`
+ *  around [from, to): the doc shrinks/grows by `m` at the two flanks,
+ *  so positions left of the first flank stay, inside the content shift
+ *  once, and past the trailing flank shift twice. */
+function mapPos(p, from, to, m, unwrap) {
+  if (unwrap) {
+    if (p < from - m) return p
+    if (p > to) return p - 2 * m
+    if (p < from) return from - m // inside the removed opening marker → content start
+    return p - m
+  }
+  if (p < from) return p
+  if (p <= to) return p + m // from..to (incl. both flanks) → content range
+  return p + 2 * m
+}
+
 /** Marker-aware toggling of an emphasis wrap (`**` or `*`).
  *
  * - selection already enclosed by the marker  → unwrap (delete both
  *   markers, selection shrinks to the content);
- * - any other non-empty selection → wrap the selection;
+ * - any other non-empty selection → wrap the selection (selection maps
+ *   onto the wrapped content);
  * - empty selection (caret) → insert an empty pair, caret lands between
  *   the two markers so the user can type straight into it.
  */
-export function toggleWrap(text, from, to, marker) {
+export function toggleWrap(text, anchor, head, marker) {
   const m = marker.length
+  const from = Math.min(anchor, head)
+  const to = Math.max(anchor, head)
   const enclosed =
     from >= m && to <= text.length && text.slice(from - m, from) === marker && text.slice(to, to + m) === marker
 
@@ -36,8 +55,8 @@ export function toggleWrap(text, from, to, marker) {
         { from: from - m, to: from, insert: '' },
         { from: to, to: to + m, insert: '' },
       ],
-      anchor: from - m,
-      head: to - m,
+      anchor: mapPos(anchor, from, to, m, true),
+      head: mapPos(head, from, to, m, true),
     }
   }
 
@@ -45,11 +64,11 @@ export function toggleWrap(text, from, to, marker) {
     { from, to: from, insert: marker },
     { from: to, to, insert: marker },
   ]
-  if (from === to) {
+  if (anchor === head) {
     // caret mode: place the caret between the fresh pair
-    return { changes, anchor: from + m, head: from + m }
+    return { changes, anchor: anchor + m, head: anchor + m }
   }
-  return { changes, anchor: from, head: to }
+  return { changes, anchor: mapPos(anchor, from, to, m, false), head: mapPos(head, from, to, m, false) }
 }
 
 /** Remap a position through a list of non-overlapping edits.
@@ -75,8 +94,8 @@ function lineBounds(text, pos) {
 function toggleTaskLine(line) {
   const m = TASK_LINE.exec(line)
   if (!m) {
-    // not a list line — turn it into a task item (blank lines stay blank)
-    return line.trim() === '' ? line : `- [ ] ${line}`
+    // not a list line — turn it into a task item (blank lines included)
+    return line.trim() === '' ? '- [ ] ' : `- [ ] ${line}`
   }
   const [, marker, box, rest] = m
   if (box) {
