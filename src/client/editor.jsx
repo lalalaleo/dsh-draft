@@ -30,7 +30,7 @@ import { keymap } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { indentUnit } from '@codemirror/language'
 import { t } from './i18n.js'
-import { toggleWrap, toggleTaskLines } from './markdown-ops.js'
+import { toggleWrap, toggleTaskLines, listIndentOf, nextIndentLevel, prevIndentLevel } from './markdown-ops.js'
 
 /**
  * Syntax highlighting for fenced code blocks. The atomic editor ships the
@@ -66,16 +66,40 @@ function runToggleWrap(marker) {
 /** Enter inside a list item (caret in the middle of the line) splits the
  *  line with a 4-space indent — the markdown language's built-in
  *  continuation indents by the marker width (2 for `- `), which reads too
- *  tight. Line-end Enter (new sibling item) and everything else are left
- *  to the default keymap (return false). */
+ *  tight. Line-end Enter (new sibling item), empty-item Enter (exit the
+ *  list) and everything else are left to the default keymap. */
 const runEnterInList = (view) => {
   const { state } = view
   const sel = state.selection.main
   if (!sel.empty) return false
   const line = state.doc.lineAt(sel.from)
-  if (!/^(\s*)(?:[-+*]|\d+[.)])(\s+)/.exec(line.text)) return false
+  if (!listIndentOf(line.text)) return false
   if (sel.from >= line.to) return false // line end → default: new sibling item
   view.dispatch({ changes: { from: sel.from, insert: '\n    ' }, scrollIntoView: true })
+  return true
+}
+
+/** Tab / Shift-Tab on list lines: step the WHOLE line (marker included)
+ *  up/down one nesting level, 4 spaces per level — regardless of where
+ *  the caret sits on the line. This matches the editor convention
+ *  (indent the line, not insert spaces into the text). Non-list lines
+ *  and multi-caret selections fall through to the default Tab handling. */
+const runListTab = (view, shift) => {
+  const { state } = view
+  const sel = state.selection.main
+  if (!sel.empty) return false
+  const line = state.doc.lineAt(sel.from)
+  const item = listIndentOf(line.text)
+  if (!item) return false
+  const target = shift ? prevIndentLevel(item.indent) : nextIndentLevel(item.indent)
+  if (target === item.indent) return true
+  const col = sel.from - line.from
+  const newCol = col <= item.indent ? target : col + (target - item.indent)
+  view.dispatch({
+    changes: { from: line.from, to: line.from + item.indent, insert: ' '.repeat(target) },
+    selection: { anchor: line.from + newCol, head: line.from + newCol },
+    scrollIntoView: true,
+  })
   return true
 }
 
@@ -94,8 +118,10 @@ const EDITOR_EXTENSIONS = [
     { key: 'Mod-i', run: runToggleWrap('*') },
     { key: 'Mod-l', run: runToggleTask },
     { key: 'Enter', run: runEnterInList },
+    { key: 'Tab', run: (v) => runListTab(v, false) },
+    { key: 'Shift-Tab', run: (v) => runListTab(v, true) },
   ])),
-  indentUnit.of('    '), // 4-space indent (Tab, code blocks, etc.)
+  indentUnit.of('    '), // 4-space indent (code blocks, etc.)
 ]
 
 const MIRROR_KEY = 'dsh-draft.mirror.v4'
@@ -273,6 +299,46 @@ const EDITOR_CSS = `
       bg); token colors flow in via the --atomic-editor-hl-* mapping ── */
 .dsh-draft .cm-line.cm-atomic-fenced-code {
   background: var(--draft-codeblock-bg);
+}
+
+/* ── task checkbox: the widget owns a right-side breathing zone so a
+      bare "- [ ]" line shows the caret clear of the box. (A pure
+      margin-right is NOT measured by CM6's widget layout — the caret
+      still touches the border on textless lines, and the package also
+      swallows the trailing space after the checkbox.)
+      Layout rules the package relies on (display: inline-grid,
+      vertical-align, the translateY hop) are left untouched so the
+      baseline stays identical to stock; only the box width grows to
+      1.6em as a placeholder. The visual box is drawn by a ::before
+      limited to the left 1.05em; the checkmark stays a grid child
+      (preserving the package's line placement) and is nudged back to
+      the visual centre with a translateX compensation. ─ */
+.dsh-draft .cm-atomic-task-checkbox {
+  width: 1.6em; height: 1.05em;
+  margin: 0 0 0 -0.16em;
+  border: none; background: transparent;
+  position: relative;
+  /* display / vertical-align / transform: inherited from the package */
+}
+.dsh-draft .cm-atomic-task-checkbox::before {
+  content: ""; position: absolute; left: 0; top: 0;
+  width: 1.05em; height: 1.05em; box-sizing: border-box;
+  border: 1.5px solid var(--atomic-editor-fg-muted, #888);
+  border-radius: 0.22em;
+}
+.dsh-draft .cm-atomic-task-checkbox:checked::before {
+  background: var(--atomic-editor-accent, #7c3aed);
+  border-color: var(--atomic-editor-accent, #7c3aed);
+}
+.dsh-draft .cm-atomic-task-checkbox::after {
+  /* grid child as in the package: centred in the widened box, then
+     pulled back over the visual box centre; rotate/translate order
+     mirrors the stock checkmark */
+  transform: translateX(-0.275em) rotate(45deg) translate(-0.03em, -0.04em);
+}
+.dsh-draft .cm-atomic-task-checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--draft-accent) 28%, transparent 72%);
 }
 
 /* ── status bar ───────────────────────────────────────────────────── */

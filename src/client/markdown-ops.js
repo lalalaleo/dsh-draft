@@ -16,6 +16,23 @@
 
 const TASK_LINE = /^(\s*(?:[-+*]|\d+[.)])\s+)(\[[ xX]\]\s+)?(.*)$/
 const TASK_CHECKBOX = /^\[([ xX])\]\s+$/
+const LIST_PREFIX = /^(\s*)(?:[-+*]|\d+[.)])(\s+)/
+
+/** Identify a markdown list line: returns { indent } (leading spaces)
+ *  or null for non-list lines. Shared by the task toggle and the
+ *  Enter/Tab keymaps. */
+export function listIndentOf(line) {
+  const m = LIST_PREFIX.exec(line)
+  return m ? { indent: m[1].length } : null
+}
+
+/** Next/previous list nesting level, 4 spaces per level. */
+export function nextIndentLevel(indent) {
+  return 4 * (Math.floor(indent / 4) + 1)
+}
+export function prevIndentLevel(indent) {
+  return Math.max(0, 4 * (Math.ceil(indent / 4) - 1))
+}
 
 /** Map a caret/selection position through a wrap or unwrap of `marker`
  *  around [from, to): the doc shrinks/grows by `m` at the two flanks,
@@ -94,8 +111,12 @@ function lineBounds(text, pos) {
 function toggleTaskLine(line) {
   const m = TASK_LINE.exec(line)
   if (!m) {
-    // not a list line — turn it into a task item (blank lines included)
-    return line.trim() === '' ? '- [ ] ' : `- [ ] ${line}`
+    // not a list line — turn it into a task item (blank lines included).
+    // Leading indent moves BEFORE the marker so a nested/indented line
+    // keeps its nesting level instead of hanging the indent after "[ ]".
+    if (line.trim() === '') return '- [ ] '
+    const lead = /^\s*/.exec(line)[0]
+    return `${lead}- [ ] ${line.slice(lead.length)}`
   }
   const [, marker, box, rest] = m
   if (box) {
