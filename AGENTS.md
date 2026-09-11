@@ -51,9 +51,10 @@ dsh-draft/
 
 ## 4. Git 工作流与发布规则
 
-- **分支模型（M2）**：功能/修复一律走 `feat/<短名>` / `fix/<短名>` / `chore/<短名>` 分支 + 自提 PR；文档/文案小修可直推 main。合并用 **squash merge**（main 保持线性——一条 PR 一条 commit）。
+- **分支模型（M2）**：功能/修复/文档一律走 `feat/<短名>` / `fix/<短名>` / `chore/<短名>` 分支 + 自提 PR（无直推 main 例外）。合并用 **squash merge**（main 保持线性——一条 PR 一条 commit）。
 - **提交信息**：Conventional Commits（`feat:` / `fix:` / `chore:` / `docs:` / `refactor:`）。
-- **PR**：agent 自提（通道现状见 `.dsh/MEMORY.md`），标题一句话、描述列变更点与验收要点；CI 在 PR 上全跑（build+test），红了不合并。
+- **PR**：agent 自提（通道现状见 `.dsh/MEMORY.md`），标题一句话、描述列变更点与验收要点；CI 在 PR 上全跑（build+test），红了不合并。**合并必须经用户确认**——agent 不得自行 merge 到 main；由用户批准后 agent 执行，或用户亲自合并。
+- **main 语义**：main 是**稳定版本线**，只保留已发布或用户确认定稿的内容；日常开发在分支上多轮迭代与验收，合入 main 一律由用户把关。
 - **发布**：0.x 阶段 patch=修复、minor=功能。`package.json` bump + CHANGELOG 后打 **annotated tag** `vX.Y.Z` 并推送——`release.yml` 自动 `npm publish`（幂等：版本已存在则跳过，补打旧 tag 安全）。
 - **lockfile**：`package-lock.json` 入库（CI 的 `npm ci` 可复现 + 依赖缓存）；npm 发布自动排除 lockfile，提交它不影响包内容。
 
