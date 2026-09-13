@@ -26,11 +26,19 @@ import { useEffect, useRef, useState } from 'react'
 import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
 import { ATOMIC_CODE_LANGUAGES } from '@atomic-editor/editor/code-languages'
 import atomicStyles from '@atomic-editor/editor/styles.css'
-import { keymap } from '@codemirror/view'
+import { keymap, EditorView } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { indentUnit } from '@codemirror/language'
 import { t } from './i18n.js'
-import { toggleWrap, toggleTaskLines, listIndentOf, nextIndentLevel, prevIndentLevel } from './markdown-ops.js'
+import {
+  toggleWrap,
+  toggleTaskLines,
+  listIndentOf,
+  nextIndentLevel,
+  prevIndentLevel,
+  emptyItemOutdent,
+} from './markdown-ops.js'
+import { listIndent, TASK_BOX_GAP_EM } from './list-indent.js'
 
 /**
  * Syntax highlighting for fenced code blocks. The atomic editor ships the
@@ -50,9 +58,11 @@ const CODE_LANGUAGES = ATOMIC_CODE_LANGUAGES
  * result into a CM6 transaction.
  *
  * The keymap is wrapped in Prec.high so it beats the package's built-in
- * default keymap (the component's documented pattern for custom keys),
- * and the whole array is a module-level constant — the component captures
- * `extensions` once at mount and a changing reference would remount. */
+ * default keymap (the component's documented pattern for custom keys), and the
+ * whole array is a module-level constant — the component captures `extensions`
+ * once at mount and a changing reference would remount. The Enter path is not
+ * here: the package binds Enter at Prec.highest, which a keymap cannot outrank
+ * (see enterKeydown). */
 
 function runToggleWrap(marker) {
   return (view) => {
@@ -63,21 +73,37 @@ function runToggleWrap(marker) {
   }
 }
 
-/** Enter inside a list item (caret in the middle of the line) splits the
- *  line with a 4-space indent — the markdown language's built-in
- *  continuation indents by the marker width (2 for `- `), which reads too
- *  tight. Line-end Enter (new sibling item), empty-item Enter (exit the
- *  list) and everything else are left to the default keymap. */
-const runEnterInList = (view) => {
-  const { state } = view
-  const sel = state.selection.main
-  if (!sel.empty) return false
-  const line = state.doc.lineAt(sel.from)
-  if (!listIndentOf(line.text)) return false
-  if (sel.from >= line.to) return false // line end → default: new sibling item
-  view.dispatch({ changes: { from: sel.from, insert: '\n    ' }, scrollIntoView: true })
-  return true
-}
+/** Enter on an EMPTY list item: step one 4-space level out (or leave the list at
+ *  level 0). Nothing else — mid-line splits and line-end "new sibling item" are
+ *  left to the package, which copies the line's own indent and so stays correct
+ *  with 4-space levels.
+ *
+ *  Why a DOM keydown handler instead of a keymap binding: the package binds its
+ *  own Enter keymap at `Prec.highest`, and CodeMirror routes *every* keymap
+ *  through a single `Prec.default` domEventHandlers entry — so no keymap of ours
+ *  can ever run before it (bindings of equal precedence run in composition
+ *  order, and consumer extensions are composed last). A `Prec.highest` DOM
+ *  handler does run first, and returning false falls through to the keymaps.
+ *  The package's own outdent hardcodes 2-space steps (`Math.floor(indent/2)`,
+ *  `indent.slice(0, -2)`), which lands half-way between our 4-space levels. */
+const enterKeydown = EditorView.domEventHandlers({
+  keydown(event, view) {
+    if (event.key !== 'Enter' || event.isComposing) return false
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return false
+    const sel = view.state.selection.main
+    if (!sel.empty) return false
+    const line = view.state.doc.lineAt(sel.from)
+    if (sel.from !== line.to) return false // mid-line → package: new sibling item
+    const outdent = emptyItemOutdent(line.text, line.from)
+    if (!outdent) return false
+    view.dispatch({
+      changes: outdent.changes,
+      selection: { anchor: outdent.anchor, head: outdent.anchor },
+      scrollIntoView: true,
+    })
+    return true
+  },
+})
 
 /** Tab / Shift-Tab on list lines: step the WHOLE line (marker included)
  *  up/down one nesting level, 4 spaces per level — regardless of where
@@ -113,15 +139,16 @@ const runToggleTask = (view) => {
 }
 
 const EDITOR_EXTENSIONS = [
+  Prec.highest(enterKeydown), // must run before the package's Prec.highest Enter keymap
   Prec.high(keymap.of([
     { key: 'Mod-b', run: runToggleWrap('**') },
     { key: 'Mod-i', run: runToggleWrap('*') },
     { key: 'Mod-l', run: runToggleTask },
-    { key: 'Enter', run: runEnterInList },
     { key: 'Tab', run: (v) => runListTab(v, false) },
     { key: 'Shift-Tab', run: (v) => runListTab(v, true) },
   ])),
   indentUnit.of('    '), // 4-space indent (code blocks, etc.)
+  listIndent, // 4-space visual step per nesting level (see list-indent.js)
 ]
 
 const MIRROR_KEY = 'dsh-draft.mirror.v4'
@@ -301,45 +328,14 @@ const EDITOR_CSS = `
   background: var(--draft-codeblock-bg);
 }
 
-/* ── task checkbox: the widget owns a right-side breathing zone so a
-      bare "- [ ]" line shows the caret clear of the box. (A pure
-      margin-right is NOT measured by CM6's widget layout — the caret
-      still touches the border on textless lines, and the package also
-      swallows the trailing space after the checkbox.)
-      Layout rules the package relies on (display: inline-grid,
-      vertical-align, the translateY hop) are left untouched so the
-      baseline stays identical to stock; only the box width grows to
-      1.6em as a placeholder. The visual box is drawn by a ::before
-      limited to the left 1.05em; the checkmark stays a grid child
-      (preserving the package's line placement) and is nudged back to
-      the visual centre with a translateX compensation. ─ */
-.dsh-draft .cm-atomic-task-checkbox {
-  width: 1.6em; height: 1.05em;
-  margin: 0 0 0 -0.16em;
-  border: none; background: transparent;
-  position: relative;
-  /* display / vertical-align / transform: inherited from the package */
-}
-.dsh-draft .cm-atomic-task-checkbox::before {
-  content: ""; position: absolute; left: 0; top: 0;
-  width: 1.05em; height: 1.05em; box-sizing: border-box;
-  border: 1.5px solid var(--atomic-editor-fg-muted, #888);
-  border-radius: 0.22em;
-}
-.dsh-draft .cm-atomic-task-checkbox:checked::before {
-  background: var(--atomic-editor-accent, #7c3aed);
-  border-color: var(--atomic-editor-accent, #7c3aed);
-}
-.dsh-draft .cm-atomic-task-checkbox::after {
-  /* grid child as in the package: centred in the widened box, then
-     pulled back over the visual box centre; rotate/translate order
-     mirrors the stock checkmark */
-  transform: translateX(-0.275em) rotate(45deg) translate(-0.03em, -0.04em);
-}
-.dsh-draft .cm-atomic-task-checkbox:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--draft-accent) 28%, transparent 72%);
-}
+/* ── task checkbox: keep the package's widget untouched — box, checkmark,
+      grid placement and the translateY hop all stay stock — and only grow its
+      right margin, which is the entire distance between the box and a caret
+      sitting on an empty task line. Widening the widget instead (the old
+      ::before/::after rewrite) pushed task text 0.24em right of the sibling
+      bullets' column; the matching text-indent compensation lives in
+      list-indent.js, so the column stays shared. ─ */
+.dsh-draft .cm-atomic-task-checkbox { margin-right: ${TASK_BOX_GAP_EM}em; }
 
 /* ── status bar ───────────────────────────────────────────────────── */
 .dsh-draft-status {

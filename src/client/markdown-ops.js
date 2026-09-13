@@ -17,6 +17,8 @@
 const TASK_LINE = /^(\s*(?:[-+*]|\d+[.)])\s+)(\[[ xX]\]\s+)?(.*)$/
 const TASK_CHECKBOX = /^\[([ xX])\]\s+$/
 const LIST_PREFIX = /^(\s*)(?:[-+*]|\d+[.)])(\s+)/
+/** A list item with no content: the marker plus an optional task box. */
+const EMPTY_ITEM = /^\s*(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s*)?$/
 
 /** Identify a markdown list line: returns { indent } (leading spaces)
  *  or null for non-list lines. Shared by the task toggle and the
@@ -32,6 +34,28 @@ export function nextIndentLevel(indent) {
 }
 export function prevIndentLevel(indent) {
   return Math.max(0, 4 * (Math.ceil(indent / 4) - 1))
+}
+
+/** Enter at the end of an EMPTY list item: step one level out, or leave the
+ *  list entirely at level 0. Returns a CM6 change list + caret, or null when
+ *  the line is not an empty item (the caller then lets the default keymap run).
+ *
+ *  The package's own tight-continuation Enter outdents by two spaces
+ *  (`Math.floor(indent.length / 2)` then `indent.slice(0, -2)`), which lands
+ *  *between* our 4-space levels — `    - [ ] ` would come back as `  - [ ] `.
+ *  So this path is ours. */
+export function emptyItemOutdent(lineText, lineFrom = 0) {
+  if (!EMPTY_ITEM.test(lineText)) return null
+  const { indent } = listIndentOf(lineText)
+  const target = prevIndentLevel(indent)
+  if (target === indent) {
+    // already at level 0 — drop the empty item and leave the list
+    return { changes: [{ from: lineFrom, to: lineFrom + lineText.length, insert: '' }], anchor: lineFrom }
+  }
+  return {
+    changes: [{ from: lineFrom, to: lineFrom + indent, insert: ' '.repeat(target) }],
+    anchor: lineFrom + target,
+  }
 }
 
 /** Map a caret/selection position through a wrap or unwrap of `marker`
