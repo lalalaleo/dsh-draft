@@ -21,7 +21,7 @@
 
 ## 安装
 
-dsh-draft 运行在 [dsh-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) 的右侧面板中——请先确保已安装它，再安装本插件：
+dsh-draft 在 dsh **内置的右侧栏**里加一个「草稿」标签页（需要 dsh 0.1.5-rc.1 或更新版本）：
 
 ```sh
 dsh plugin --profile <profile> add dsh-draft
@@ -31,7 +31,7 @@ dsh plugin --profile <profile> add dsh-draft
 
 ## 使用
 
-打开右侧 better-sidebar，点击标签栏「+」，选择 **草稿**，开始输入。
+打开右侧栏，点击标签栏「+」，选择 **草稿**，开始输入。草稿标签页和侧栏里其他标签页一样，可以拖动、分栏或浮动。
 
 写作用键盘为主：选中文字后按 `Ctrl/Cmd+B`（加粗）或 `Ctrl/Cmd+I`（斜体）包裹——再按一次取消。列表行上按 `Ctrl/Cmd+L` 切换任务框（`[ ]` ⇄ `[x]`；普通行会自动变成任务项）。嵌套列表续行缩进 4 个空格。
 
