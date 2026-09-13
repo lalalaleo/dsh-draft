@@ -1,12 +1,38 @@
 /**
  * Minimal en/zh copy for dsh-draft. The dsh ecosystem ships en/zh; anything
- * not zh falls back to English. Kept deliberately small (AGENTS §1.4):
+ * not zh falls back to English. Kept deliberately small (AGENTS §1.4).
  *
- * - Tab title follows the HOST locale preference (`ctx.locale`, live) —
- *   see isZh(ctx), used by a function title in registerTab.
- * - Component copy follows the document/browser language at module load;
- *   a page refresh re-picks the language.
+ * ONE source of truth for the language: the host's locale preference. The
+ * client entry reads it into this module (`setHostLocale`) on load and on every
+ * `ctx.locale` change, so the tab title, the guide copy and the editor's status
+ * bar all follow the same preference. Before this they disagreed whenever a
+ * Chinese host ran an English browser: the title used the host locale while
+ * component copy used the document/browser language.
+ *
+ * The document/browser language remains only as the fallback for a host where
+ * the locale service is unavailable.
  */
+
+/** Host preference, pushed in by the client entry; null until then. */
+let hostZh = null
+
+/** Record the host's language preference. */
+export function setHostLocale(zh) {
+  hostZh = zh
+}
+
+/** Read a dsh context's language preference; null when the service is absent. */
+export function readHostLocale(ctx) {
+  try {
+    const active = ctx?.locale?.getLocale?.().active
+    return active ? String(active).toLowerCase().startsWith('zh') : null
+  } catch {
+    // `locale` is an inject-gated service: an undeclared access throws rather
+    // than yielding undefined, so optional chaining alone cannot guard it.
+    return null
+  }
+}
+
 export function detectZh() {
   try {
     const doc = typeof document !== 'undefined' && document.documentElement
@@ -19,26 +45,11 @@ export function detectZh() {
   }
 }
 
-/** zh / en selector for component copy. */
-export const t = (zh, en) => (detectZh() ? zh : en)
-
-/**
- * Whether the active plugin context runs in Chinese (host preference).
- *
- * `locale` is an inject-gated service: without an `inject` declaration,
- * merely touching `ctx.locale` throws ("cannot get property ... without
- * inject"), which optional chaining cannot catch (getter throws, it never
- * yields undefined). So the access is guarded: when the service is present
- * (injected host), the host preference wins; otherwise fall back to the
- * document/browser language. The tab title re-evaluates per render, so a
- * host locale switch is picked up live.
- */
-export function isZh(ctx) {
-  try {
-    const active = ctx?.locale?.getLocale?.().active
-    if (active) return String(active).toLowerCase().startsWith('zh')
-  } catch {
-    /* locale service not injected — fall through to browser language */
-  }
-  return detectZh()
+/** Whether copy should be Chinese: the host preference when known, else the
+ *  document/browser language. Evaluated per call, so it tracks a locale switch. */
+export function isZh() {
+  return hostZh ?? detectZh()
 }
+
+/** zh / en selector for component copy. */
+export const t = (zh, en) => (isZh() ? zh : en)
