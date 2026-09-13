@@ -1,6 +1,6 @@
 {
   "name": "dsh-draft",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A Markdown-based draft-board plugin for dsh: live-preview editing and local persistence.",
   "type": "module",
   "license": "MIT",
