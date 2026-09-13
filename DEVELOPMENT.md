@@ -7,6 +7,7 @@
 - 版本：0.1.0（已发布：npm 2026-09-08T18:55Z）。能力：Live Preview 编辑（标题/列表/任务框/表格/引用/链接/代码围栏高亮）、自动落盘、明暗跟随宿主、简单 en/zh i18n。
 - **CI**（GitHub Actions，`.github/workflows/`）：`ci.yml` 在 PR/push 上全跑 `npm ci --legacy-peer-deps` + build + test；`release.yml` 在 `v*` tag 上自动 npm publish（幂等：版本已存在则跳过，补打旧 tag 安全。规则见 AGENTS §4）。`package-lock.json` 已入库（`npm ci` 依赖；npm 发布自动排除该文件，不进包）。
 - **编辑器（当前实现）**：`@atomic-editor/editor`（MIT, kenforthewin/atomic-editor）——实现可替换，范式见 AGENTS §2。**不要**回到手写 `width:0` 隐藏 + widget（结构性 bug，见 §7）。
+- **列表缩进（4 空格约定）**：库把每级缩进写死为 `LIST_LEVEL_EM = 0.6`（≈1.8 空格）并以行内 `padding-left` 输出，无变量/选项可调；`src/client/list-indent.js` 用自补 line decoration 改成 1.33em/级（= 4 空格），基座 2em（= 库的 0.8em + 1.2em alcove）不动。任务框右侧间距与 `text-indent` 补偿在同一层（见 §7）。
 - **样式映射**：库读 `--atomic-editor-*` 变量；`.dsh-draft.light/.dark .atomic-cm-editor` 上重映射到 `--draft-*`（light/dark 各一套）；标题按级覆盖（h2 下划线）、引用绿 rail、行内代码底色。
 - **语法高亮**：`CODE_LANGUAGES = ATOMIC_CODE_LANGUAGES`（约 20 种：JS/TS/Python/Go/Rust/C/C++/Java/PHP/Swift/Shell/SQL/HTML/CSS/XML/JSON/YAML/TOML/Dockerfile/Markdown），引用必须稳定（模块级常量）；`--draft-hl-*` 双套调色板 + `--draft-codeblock-bg` 打底。加语言：`npm install --save-dev --legacy-peer-deps --no-audit --no-fund @codemirror/lang-<x>`，再改 code-languages 清单或传自建 `LanguageDescription[]`。
 - `markdownSource` 是**受控源**（变更=重建视图）：只在加载后设一次；编辑一律走 `onMarkdownChange`。
@@ -20,7 +21,7 @@
 
 ## 3. 测试
 
-- `node scripts/test.mjs`：`src/codec.js`（**legacy 参考实现**，编辑器已不用）往返/不变量测试，纯逻辑无 DOM。
+- `node scripts/test.mjs`：`src/codec.js`（**legacy 参考实现**，编辑器已不用）往返/不变量测试 + `src/client/markdown-ops.js` 的纯函数（wrap/task 切换、列表缩进级别、空项退级），纯逻辑无 DOM。
 - 渲染效果只能浏览器验收（§6.6）。
 
 ## 4. 挂载（npm 安装 / 源码开发）
@@ -85,6 +86,10 @@ CSS 排版效果只能浏览器验收。
 - **CSS 特异性**：覆盖须在 atomic 样式之后或更高特异性（`.dsh-draft .cm-line.cm-atomic-h2` = 0,3,0 > 包默认 0,2,0）。
 - **内层高亮 span 盖外层 mark 色**：`strong`/`em` 覆盖要穿透子元素（`.cm-atomic-strong, .cm-atomic-strong * { color: … !important }`）。
 - **库 `styles.css` 必须注入**否则无样式；`codeLanguages` 引用必须稳定否则编辑器重挂。
+- **列表缩进不可配置**：`LIST_LEVEL_EM = 0.6`/级（≈1.8 空格）写死在 `inline-preview.js` 里，以行内 `padding-left` 输出——CSS 变量改不了，只能自补 line decoration 覆盖（`src/client/list-indent.js`）。同位置 line decoration 的 `style` 由 CodeMirror 按 facet 顺序追加，consumer `extensions` 在包之后 → **后写的值生效，无需 `!important`**（实测：故意填更小的值也照样生效，证明是顺序而非数值）。基座 2em = 包的 `0.8em + 1.2em(alcove)`，depth 0 不受影响。
+- **keymap 抢不过包的 `Prec.highest`**：CM6 把所有 keymap 汇总进*一个* `Prec.default` 的 `domEventHandlers`（`handleKeyEvents`）执行，所以包的 `Prec.highest` Enter（`insertTightListItem`）永远先跑；要抢先只能用 `Prec.highest(EditorView.domEventHandlers({ keydown }))`（见 `enterKeydown`）。踩过的坑：曾用 `Prec.high(keymap)` 接 Enter，"4 空格拆分"实际从未生效（死代码）。
+- **包的列表续行/退级按 2 空格写死**（`Math.floor(indent.length / 2)`、`indent.slice(0, -2)`）：4 空格约定下空项回车会退成半级（`    - [ ] ` → `  - [ ] `）。空项退级由 `emptyItemOutdent`（`markdown-ops.js`）接管；行中/行尾 Enter 交给包（它按行自身缩进续写，4 空格下正确）。
+- **任务框 widget 别自己重画**：包把 `width 1.05em + margin-left -0.16em + margin-right M` 的 advance 与 `LIST_ALCOVE_EM = 1.2em`、`text-indent = -(0.89em + M)` 绑成一套等式。曾用 `::before`/`::after` 重画加宽到 1.6em：任务文字比同级列表右偏 0.24em（实测 3.86px），换来的只是同样宽度的间距。正解=只改 `margin-right` + `list-indent.js` 里同步 `text-indent`。
 
 ### 构建与依赖
 - **`--legacy-peer-deps` 必须**（peer 大树）；编辑器库零 dependencies 全 peer，devDependencies 必须列全。

@@ -97,7 +97,7 @@ import { inlineTokens, caretInMarker, caretDisplacement } from '../src/codec.js'
 }
 
 // ─── editor formatting helpers (markdown-ops.js) ───
-import { toggleWrap, toggleTaskLines } from '../src/client/markdown-ops.js'
+import { toggleWrap, toggleTaskLines, listIndentOf, nextIndentLevel, prevIndentLevel, emptyItemOutdent } from '../src/client/markdown-ops.js'
 
 function applyChanges(text, r) {
   let out = ''
@@ -150,6 +150,8 @@ const sel = (r) => `${r.anchor}:${r.head}`
   check('ordered item → task', applyChanges('1. 甲', r) === '1. [ ] 甲')
   r = toggleTaskLines('普通段落', 0, 4)
   check('plain line → task item', applyChanges('普通段落', r) === '- [ ] 普通段落')
+  r = toggleTaskLines('  嵌套段落', 0, 6)
+  check('indented line keeps indent before marker', applyChanges('  嵌套段落', r) === '  - [ ] 嵌套段落')
   r = toggleTaskLines('', 0, 0)
   check('blank line becomes task', applyChanges('', r) === '- [ ] ')
   // multi-line selection rewrites each touched line, blanks included
@@ -161,6 +163,45 @@ const sel = (r) => `${r.anchor}:${r.head}`
   // selection remap: anchor/head stay on the same visual lines
   r = toggleTaskLines('- 甲\n- 乙', 0, 6)
   check('multi-line selection remapped', applyChanges('- 甲\n- 乙', r) === '- [ ] 甲\n- [ ] 乙' && sel(r) === '0:14')
+}
+
+{
+  // list indent helpers (4-space levels)
+  check('list level 0', listIndentOf('- a').indent === 0)
+  check('list level 2', listIndentOf('  - a').indent === 2)
+  check('list level 4', listIndentOf('    - a').indent === 4)
+  check('ordered list', listIndentOf('1. a').indent === 0)
+  check('task list', listIndentOf('- [ ] a').indent === 0)
+  check('plain line is not a list', listIndentOf('abc') === null)
+  check('continuation is not a list', listIndentOf('  abc') === null)
+  check('next level 0→4', nextIndentLevel(0) === 4)
+  check('next level 2→4', nextIndentLevel(2) === 4)
+  check('next level 4→8', nextIndentLevel(4) === 8)
+  check('next level 6→8', nextIndentLevel(6) === 8)
+  check('prev level 4→0', prevIndentLevel(4) === 0)
+  check('prev level 8→4', prevIndentLevel(8) === 4)
+  check('prev level 0 stays 0', prevIndentLevel(0) === 0)
+  check('prev level 2 → 0', prevIndentLevel(2) === 0)
+}
+
+{
+  // Enter at the end of an empty item steps a FULL 4-space level out — the
+  // package's own outdent would leave a half level (`    - [ ] ` → `  - [ ] `).
+  const out = (text, from = 0) => {
+    const r = emptyItemOutdent(text, from)
+    return r && { text: applyChanges(text, r), caret: r.anchor }
+  }
+  check('empty nested item → level 0', out('    - [ ] ').text === '- [ ] ')
+  check('empty nested item caret', out('    - [ ] ', 100).caret === 100)
+  check('empty 8-space item → 4', out('        - ').text === '    - ')
+  check('empty item outdent lands on the new marker', out('        - ', 20).caret === 24)
+  check('empty ordered item → level 0', out('    1. ').text === '1. ')
+  check('empty top-level item leaves the list', out('- [ ] ').text === '')
+  check('empty top-level bullet leaves the list', out('- ').text === '')
+  check('legacy 2-space item → level 0', out('  - [x] ').text === '- [x] ')
+  check('non-empty item is not an outdent', emptyItemOutdent('- 买菜') === null)
+  check('continuation line is not an outdent', emptyItemOutdent('    abc') === null)
+  check('plain blank line is not an outdent', emptyItemOutdent('') === null)
 }
 
 if (failures === 0) {
