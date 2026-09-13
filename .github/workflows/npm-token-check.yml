@@ -1,0 +1,36 @@
+name: NPM token check
+
+# Manual pre-flight for the release path: proves the NPM_TOKEN secret exists and
+# authenticates, without publishing anything.
+#
+#   Actions → NPM token check → Run workflow
+#
+# Run it after setting or rotating the secret, instead of discovering a bad token
+# on a real release. `npm whoami` proves the token is valid; publish *rights* can
+# only be proven by an actual publish — and since release.yml is idempotent, a
+# publish that fails on auth can simply be re-run once the secret is fixed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: NPM_TOKEN authenticates (read-only)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is not set — add it before tagging a release (see .dsh/RELEASING.md §2)"
+            exit 1
+          fi
+          echo "authenticated as: $(npm whoami)"
+          echo "published version: $(npm view dsh-draft version)"
+          echo "dist-tags: $(npm view dsh-draft dist-tags --json)"
