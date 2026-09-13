@@ -64,9 +64,9 @@ dsh-draft/
 - **client 面（浏览器）**：`package.json` 声明 `"dsh": { "client": { "platform": "web", ... }, "bundle": { "patch": "./cordis.patch.yml" } }`，且 `exports["./client"]` 指向 `lib/client.js`。
 - **挂载行**：向 profile 的 `cordis.patch.yml` 插入 `- insert: { id: draft, name: dsh-draft }`——`name` 必须等于包名（client-modules 按它定位 package.json）。
 - **浏览器加载**：`dsh-client-modules`（Node 侧）扫描已挂载行的包 → 收进 `window.__DSH_BOOT__` 名册；bundle 以 **CJS closure-factory** 注册：`window.__ModuleLoader__.load({ id: "dsh-draft", factory: (require) => … })`。
-- **client 插件**导出 `{ inject: ['betterSidebar'], apply(ctx) }`（`betterSidebar` 由 dsh-better-sidebar 的 client 半提供）；注册 `registerTab({ id: 'draft', title: () => … })`。
+- **client 插件**导出 `{ inject: ['sidebarRightTabs', 'slots', 'locale'], apply(ctx) }`，向 **dsh 官方右侧栏**（`@deepseek-ai/dsh-client-ui-sidebar-right`）注册一个 page tab，两段式：① `ctx.sidebarRightTabs.register({ id, kind, title, guide })` 注册类型（`guide` 让侧栏「+」的引导页列出它）；② `ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({ name, key: id }, Body))` 注册主体，标题同理（`sidebar.right.pane.tab.title`）。**不依赖任何第三方 sidebar 插件**。
 - **平台模块**（`react`、`react-dom/client`、`react/jsx-runtime`）由浏览器 loader 提供——**打包时 external**；其余依赖（CM6 等）打进 bundle。
-- **语言**：dsh 生态为 en/zh。Tab 标题经 `ctx.locale`（宿主偏好，实时；未注入时降级浏览器语言——inject 门控见 DEVELOPMENT.md §7）；组件文案按文档/浏览器语言（见 `src/client/i18n.js`）。
+- **语言**：dsh 生态为 en/zh。Tab 标题/引导页文案经 `ctx.locale`（宿主偏好，实时；`locale` 已在 client inject 里，见上）；组件文案按文档/浏览器语言（见 `src/client/i18n.js`）。
 
 ## 6. 重要文档索引
 

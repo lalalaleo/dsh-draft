@@ -21,7 +21,7 @@
 
 ## Installation
 
-dsh-draft lives inside the [dsh-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) right panel — make sure it is installed first, then:
+dsh-draft adds a **Draft** tab to the built-in right sidebar (dsh 0.1.5-rc.1 or newer):
 
 ```sh
 dsh plugin --profile <profile> add dsh-draft
@@ -31,7 +31,7 @@ Replace `<profile>` with your profile name (the default web profile is `web`). Y
 
 ## Usage
 
-Open the right sidebar, click "+" in its tab bar, and pick **Draft / 草稿** — start typing.
+Open the right sidebar, click "+" in its tab bar, and pick **Draft / 草稿** — start typing. The tab can be placed, split, or floated like any other sidebar tab.
 
 Formatting is keyboard-first: select text and press `Ctrl/Cmd+B` (bold) or `Ctrl/Cmd+I` (italic) to wrap it — press again to unwrap. `Ctrl/Cmd+L` on a list line toggles its task checkbox (checked ⇄ unchecked; a plain line becomes a task). Nested list continuation indents with 4 spaces.
 
