@@ -4,7 +4,7 @@
 
 ## 1. 工程现状
 
-- 版本：0.1.0（已发布：npm 2026-09-08T18:55Z）。能力：Live Preview 编辑（标题/列表/任务框/表格/引用/链接/代码围栏高亮）、自动落盘、明暗跟随宿主、简单 en/zh i18n。
+- 版本：0.2.0（本次待发布；0.1.0 已发布 npm 2026-09-08T18:55Z）。能力：Live Preview 编辑（标题/列表/任务框/表格/引用/链接/代码围栏高亮）、挂 dsh 官方右侧栏的草稿标签页、自动落盘、明暗跟随宿主、简单 en/zh i18n。
 - **CI**（GitHub Actions，`.github/workflows/`）：`ci.yml` 在 PR/push 上全跑 `npm ci --legacy-peer-deps` + build + test；`release.yml` 在 `v*` tag 上自动 npm publish（幂等：版本已存在则跳过，补打旧 tag 安全。规则见 AGENTS §4）。`package-lock.json` 已入库（`npm ci` 依赖；npm 发布自动排除该文件，不进包）。
 - **编辑器（当前实现）**：`@atomic-editor/editor`（MIT, kenforthewin/atomic-editor）——实现可替换，范式见 AGENTS §2。**不要**回到手写 `width:0` 隐藏 + widget（结构性 bug，见 §7）。
 - **右侧栏集成**：挂进 dsh **官方右侧栏**（`@deepseek-ai/dsh-client-ui-sidebar-right`），两段式注册（类型 → 主体/标题），guide 条目让侧栏「+」列出草稿。已不再依赖 dsh-better-sidebar；`package.json` 的 `dsh.engines.dsh` 声明最低 dsh 版本，`dsh.client.inject` 列官方包名（排序/预载用）。细节与踩坑见 §7。
