@@ -46,8 +46,23 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       # Only assert `latest` when this run did the publishing: a backfilled tag
       # for an older version legitimately leaves `latest` where it is.
+      #
+      # The registry's read path can lag a few seconds behind a fresh publish
+      # (v0.2.0's verify ran 0.5s after the upload and still saw the old tag), so
+      # poll instead of failing a successful release on a stale read.
       - name: Verify dist-tag
         if: steps.published.outputs.skip != 'true'
         run: |
           V="$(node -p "require('./package.json').version")"
-          npm view dsh-draft dist-tags --json | grep -q "\"latest\": \"${V}\"" && echo "latest -> ${V} OK"
+          for attempt in 1 2 3 4 5 6; do
+            TAGS="$(npm view dsh-draft dist-tags --json || true)"
+            if echo "$TAGS" | grep -q "\"latest\": *\"${V}\""; then
+              echo "latest -> ${V} OK (attempt ${attempt})"
+              echo "$TAGS"
+              exit 0
+            fi
+            echo "attempt ${attempt}: latest is not ${V} yet — retrying in 10s"
+            sleep 10
+          done
+          echo "::error::dist-tags still do not name ${V} as latest after ~60s"
+          exit 1
