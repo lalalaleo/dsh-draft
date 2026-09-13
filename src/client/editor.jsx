@@ -371,9 +371,28 @@ function injectEditorCss() {
   return () => style.remove()
 }
 
+/** Autosave timing. The network write is debounced; the localStorage mirror —
+ *  the crash net — is written during a burst too and always on the way out, so
+ *  closing the tab or reloading never drops the tail of what was typed. */
+const SAVE_DEBOUNCE_MS = 600
+const MIRROR_THROTTLE_MS = 200
+const RETRY_MS = 3000
+/** `fetch(keepalive)` (and sendBeacon) cap the body at 64 KiB; above that the
+ *  mirror is the only thing a page-hide can reliably leave behind. */
+const KEEPALIVE_MAX_BYTES = 60000
+
 export function ScratchpadTab() {
   const mountRef = useRef(null)
-  const st = useRef({ timer: null, lastMarkdown: undefined, lastSaved: '', savedAtText: '', seq: 0 })
+  const st = useRef({
+    saveTimer: null,
+    mirrorTimer: null,
+    retryTimer: null,
+    /** Latest text not yet confirmed saved; the flush on the way out reads it. */
+    pending: undefined,
+    lastSaved: '',
+    savedAtText: '',
+    seq: 0,
+  })
   const [initialMd, setInitialMd] = useState(null) // string | null — editor mounts once per load
   const [phase, setPhase] = useState('loading') // loading | ready | error
   const [status, setStatus] = useState('idle')
@@ -386,8 +405,13 @@ export function ScratchpadTab() {
 
   const save = (md) => {
     const r = st.current
+    clearTimeout(r.saveTimer)
+    clearTimeout(r.retryTimer)
+    clearTimeout(r.mirrorTimer)
+    r.saveTimer = r.retryTimer = r.mirrorTimer = null
     mirrorWrite(md)
     if (md === r.lastSaved) {
+      if (r.pending === md) r.pending = undefined
       setDot('ok', r.savedAtText ? `${t('已保存', 'Saved')} ${r.savedAtText}` : t('无改动', 'No changes'))
       return
     }
@@ -397,6 +421,7 @@ export function ScratchpadTab() {
       .then((savedAt) => {
         if (seq !== r.seq) return
         r.lastSaved = md
+        if (r.pending === md) r.pending = undefined
         r.savedAtText = savedAt ? new Date(savedAt).toLocaleTimeString(t('zh-CN', 'en-US'), { hour: '2-digit', minute: '2-digit' }) : ''
         setDot('ok', r.savedAtText ? `${t('已保存', 'Saved')} ${r.savedAtText}` : t('已保存', 'Saved'))
       })
@@ -404,20 +429,64 @@ export function ScratchpadTab() {
         if (seq !== r.seq) return
         console.error('[dsh-draft] save failed:', err)
         setDot('err', t('保存失败（服务不可用？），稍后自动重试', 'Save failed (service unavailable?) — will retry automatically'))
+        // Actually retry, so the message above is true: the mirror already holds
+        // the text, and this puts it on disk without waiting for another edit.
+        r.retryTimer = setTimeout(() => {
+          r.retryTimer = null
+          if (r.pending !== undefined && r.pending !== r.lastSaved) save(r.pending)
+        }, RETRY_MS)
       })
   }
 
   const scheduleSave = (md) => {
     const r = st.current
-    r.lastMarkdown = md
-    clearTimeout(r.timer)
-    r.timer = setTimeout(() => save(md), 600)
+    r.pending = md
+    // The mirror is local and cheap: keep it at most MIRROR_THROTTLE_MS behind,
+    // so a crash or a close mid-burst loses at most that much.
+    if (r.mirrorTimer === null) {
+      r.mirrorTimer = setTimeout(() => {
+        r.mirrorTimer = null
+        if (r.pending !== undefined) mirrorWrite(r.pending)
+      }, MIRROR_THROTTLE_MS)
+    }
+    clearTimeout(r.saveTimer)
+    r.saveTimer = setTimeout(() => save(md), SAVE_DEBOUNCE_MS)
     setDot('pending', t('编辑中…', 'Editing…'))
   }
 
   const handleChange = (md) => scheduleSave(md)
 
+  /** Last-chance flush: mirror synchronously, then try the network once. Used
+   *  when the tab unmounts (close / session switch / HMR) and on page hide. */
+  const flushPending = ({ keepalive = false } = {}) => {
+    const r = st.current
+    const md = r.pending
+    if (md === undefined || md === r.lastSaved) return
+    mirrorWrite(md)
+    const body = JSON.stringify({ text: md })
+    if (keepalive && new Blob([body]).size > KEEPALIVE_MAX_BYTES) return
+    fetch('/draft/api', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body,
+      keepalive,
+    }).catch(() => {})
+  }
+
   useEffect(() => { injectEditorCss() }, [])
+
+  // Leaving the page (close, reload, navigate, tab discard): write the mirror
+  // synchronously and, for a small enough body, fire one keepalive PUT.
+  useEffect(() => {
+    const onHide = () => flushPending({ keepalive: true })
+    const onVisibility = () => { if (document.visibilityState === 'hidden') onHide() }
+    window.addEventListener('pagehide', onHide)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', onHide)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
 
   // Follow the host light/dark theme.
   useEffect(() => {
@@ -464,7 +533,14 @@ export function ScratchpadTab() {
     run()
     return () => {
       cancelled = true
-      clearTimeout(st.current.timer)
+      const r = st.current
+      clearTimeout(r.saveTimer)
+      clearTimeout(r.mirrorTimer)
+      clearTimeout(r.retryTimer)
+      r.saveTimer = r.mirrorTimer = r.retryTimer = null
+      // Closing the tab / switching session must not drop a pending debounce.
+      // No setState here — this runs on the way out.
+      flushPending()
     }
   }, [reload])
 

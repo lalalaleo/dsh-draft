@@ -43,9 +43,8 @@ dsh-draft/
 │   ├── index.js        # host 面源码（仅 Node 内置模块）
 │   └── client.js       # browser 面构建产物（×不入库；发布时随包）
 ├── src/
-│   ├── codec.js        # legacy 纯 codec 参考实现（仅测试用）
-│   └── client/         # index.jsx（注册 Tab）、editor.jsx（编辑器+自动保存）、i18n.js（en/zh）
-├── scripts/            # build.mjs（打包）、test.mjs（测试）
+│   └── client/         # index.jsx（注册右侧栏 Tab）、editor.jsx（编辑器+自动保存）、markdown-ops.js（纯编辑变换）、list-indent.js（列表缩进层）、i18n.js（en/zh）
+├── scripts/            # build.mjs（打包）、test.mjs（纯函数测试）、test-host.mjs（host 路由测试）、probe-browser.mjs（浏览器量测，需 Chrome，手动跑）
 └── node_modules/       # 构建期依赖（不入库）
 ```
 
@@ -66,7 +65,7 @@ dsh-draft/
 - **浏览器加载**：`dsh-client-modules`（Node 侧）扫描已挂载行的包 → 收进 `window.__DSH_BOOT__` 名册；bundle 以 **CJS closure-factory** 注册：`window.__ModuleLoader__.load({ id: "dsh-draft", factory: (require) => … })`。
 - **client 插件**导出 `{ inject: ['sidebarRightTabs', 'slots', 'locale'], apply(ctx) }`，向 **dsh 官方右侧栏**（`@deepseek-ai/dsh-client-ui-sidebar-right`）注册一个 page tab，两段式：① `ctx.sidebarRightTabs.register({ id, kind, title, guide })` 注册类型（`guide` 让侧栏「+」的引导页列出它）；② `ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({ name, key: id }, Body))` 注册主体，标题同理（`sidebar.right.pane.tab.title`）。**不依赖任何第三方 sidebar 插件**。
 - **平台模块**（`react`、`react-dom/client`、`react/jsx-runtime`）由浏览器 loader 提供——**打包时 external**；其余依赖（CM6 等）打进 bundle。
-- **语言**：dsh 生态为 en/zh。Tab 标题/引导页文案经 `ctx.locale`（宿主偏好，实时；`locale` 已在 client inject 里，见上）；组件文案按文档/浏览器语言（见 `src/client/i18n.js`）。
+- **语言**：dsh 生态为 en/zh。语言只有**一个来源**——宿主 `ctx.locale`（已进 client inject，见上）：client entry 把偏好推入 `src/client/i18n.js` 并在 locale 变化时同步，因此 Tab 标题、引导页文案与编辑器状态栏不会各说各话；`locale` 不可用时才降级文档/浏览器语言。
 
 ## 6. 重要文档索引
 

@@ -9,10 +9,12 @@
 - **编辑器（当前实现）**：`@atomic-editor/editor`（MIT, kenforthewin/atomic-editor）——实现可替换，范式见 AGENTS §2。**不要**回到手写 `width:0` 隐藏 + widget（结构性 bug，见 §7）。
 - **右侧栏集成**：挂进 dsh **官方右侧栏**（`@deepseek-ai/dsh-client-ui-sidebar-right`），两段式注册（类型 → 主体/标题），guide 条目让侧栏「+」列出草稿。已不再依赖 dsh-better-sidebar；`package.json` 的 `dsh.engines.dsh` 声明最低 dsh 版本，`dsh.client.inject` 列官方包名（排序/预载用）。细节与踩坑见 §7。
 - **列表缩进（4 空格约定）**：库把每级缩进写死为 `LIST_LEVEL_EM = 0.6`（≈1.8 空格）并以行内 `padding-left` 输出，无变量/选项可调；`src/client/list-indent.js` 用自补 line decoration 改成 1.33em/级（= 4 空格），基座 2em（= 库的 0.8em + 1.2em alcove）不动。任务框右侧间距与 `text-indent` 补偿在同一层（见 §7）。
+- **自动保存的可靠性**：编辑即写 localStorage 镜像（200ms 节流 —— 镜像必须在防抖窗口内落地），网络 PUT 600ms 防抖；`pagehide`/`visibilitychange`/卸载时强制 flush（镜像 + ≤60KB 的 keepalive PUT，超出只靠镜像）；失败后 3s 自动重试（此前那句"稍后自动重试"其实不会重试）。加载时镜像比磁盘新则优先采用并回推。
+- **host 存储**：`$DSH_HOME/draft.md`，原子写（tmp + rename），`mkdir` 兜底建目录，按 **text 的 UTF-8 字节数**限 2MB（不是 JSON 外壳长度）。见 §5/§7。
 - **样式映射**：库读 `--atomic-editor-*` 变量；`.dsh-draft.light/.dark .atomic-cm-editor` 上重映射到 `--draft-*`（light/dark 各一套）；标题按级覆盖（h2 下划线）、引用绿 rail、行内代码底色。
 - **语法高亮**：`CODE_LANGUAGES = ATOMIC_CODE_LANGUAGES`（约 20 种：JS/TS/Python/Go/Rust/C/C++/Java/PHP/Swift/Shell/SQL/HTML/CSS/XML/JSON/YAML/TOML/Dockerfile/Markdown），引用必须稳定（模块级常量）；`--draft-hl-*` 双套调色板 + `--draft-codeblock-bg` 打底。加语言：`npm install --save-dev --legacy-peer-deps --no-audit --no-fund @codemirror/lang-<x>`，再改 code-languages 清单或传自建 `LanguageDescription[]`。
 - `markdownSource` 是**受控源**（变更=重建视图）：只在加载后设一次；编辑一律走 `onMarkdownChange`。
-- **i18n（en/zh）**：Tab 标题/guide 文案经 `ctx.locale`（宿主偏好、实时；`locale` 已进 client inject）；组件文案按文档/浏览器语言（模块加载时定，刷新重选）。见 `src/client/i18n.js`；注入门控的坑见 §7。
+- **i18n（en/zh）**：**单一来源 = 宿主 `ctx.locale`**。client entry 把偏好推入 `src/client/i18n.js`（`setHostLocale`）并在 `ctx.locale.subscribe` 上同步，所以 Tab 标题、guide 文案与编辑器状态栏用的是同一个语言；`locale` 不可用时才降级文档/浏览器语言。见 `src/client/i18n.js`；注入门控的坑见 §7。
 
 ## 2. 构建（lib/client.js）
 
@@ -22,8 +24,9 @@
 
 ## 3. 测试
 
-- `node scripts/test.mjs`：`src/codec.js`（**legacy 参考实现**，编辑器已不用）往返/不变量测试 + `src/client/markdown-ops.js` 的纯函数（wrap/task 切换、列表缩进级别、空项退级），纯逻辑无 DOM。
-- 渲染效果只能浏览器验收（§6.6）。
+- `node scripts/test.mjs`：`src/client/markdown-ops.js` 的纯函数（wrap/task 切换、列表缩进级别、空项退级），纯逻辑无 DOM。
+- `node scripts/test-host.mjs`：**host 面**（`lib/index.js`）——假 `webServer` + 临时 `DSH_HOME`，覆盖往返/原子写/并发/错误码/目录兜底/2MB 边界。持久化是产品承诺，必须留在这里。
+- `npm test` 跑上面两个（CI 同）；渲染效果只能用浏览器量测，见 §6.7 的 `scripts/probe-browser.mjs`。
 
 ## 4. 挂载（npm 安装 / 源码开发）
 
@@ -37,8 +40,8 @@
 
 ## 5. Persistence 细节
 
-- host（lib/index.js）：`inject: ['webServer']`（旧键 `httpServer` 有回退：`ctx.webServer ?? ctx.get('webServer') ?? ctx.get('httpServer')`）；`/draft/api` GET 读 / PUT 写；`storageFile()` = `$DSH_HOME/draft.md`（默认 `~/.dsh/draft.md`）；原子写（tmp+rename）、promise 链串行、≤2MB。
-- client（editor.jsx）：GET 取 `{text, savedAt}`；localStorage 镜像（`dsh-draft.mirror.v4`）`ts > remote.savedAt` 时优先本地并回推；600ms 防抖 PUT；状态栏 已保存/保存中/保存失败；失败不丢（镜像兜底）。
+- host（lib/index.js）：`inject: ['webServer']`（旧键 `httpServer` 有回退：`ctx.webServer ?? ctx.get('webServer') ?? ctx.get('httpServer')`）；`/draft/api` GET 读 / PUT 写；`storageFile()` = `$DSH_HOME/draft.md`（默认 `~/.dsh/draft.md`）；原子写（tmp+rename）、`mkdir` 兜底、promise 链串行、text 的 UTF-8 字节数 ≤2MB（超限 413）。
+- client（editor.jsx）：GET 取 `{text, savedAt}`；localStorage 镜像（`dsh-draft.mirror.v4`）`ts > remote.savedAt` 时优先本地并回推；镜像 200ms 节流、PUT 600ms 防抖、卸载/页面隐藏强制 flush、失败 3s 重试；状态栏 已保存/保存中/保存失败。
 
 ## 6. 开发与调试
 
@@ -79,6 +82,15 @@ CSS 排版效果只能浏览器验收。
 ### 6.6 最小验证闭环
 改完 → build（前端）或重启（后端）→ 刷新 → 侧栏「+」→ 草稿 → 输入 `**加粗**`/`# 标题`/`- 列表`/`> 引用`，核对排版、`*` 显隐、状态栏"已保存"。
 
+### 6.7 浏览器量测（`scripts/probe-browser.mjs`）
+渲染与几何不能靠读代码断言，用这个（需本机 Chrome，**不进 CI**）：
+
+```sh
+node scripts/probe-browser.mjs      # 全部断言通过则退出码 0
+```
+
+它做的事：① 用 esbuild 打包 `scripts/probe-browser-entry.js`（真跑 `list-indent.js` 与 `markdown-ops.js`）；② 用包自带 CSS + `EDITOR_CSS` 拼一个独立页面，在 headless Chrome 里通过 CDP 量 `.cm-line` 的 `padding-left`、任务框与文字列、折行续行；③ 用 CDP 真发 Enter 键验证三种换行路径；④ 用桩 `__ModuleLoader__` 载入 `lib/client.js`、跑 `apply()`，按官方两段式契约核对注册内容。`?stock=1` 可量库原生行为做对比。
+
 ## 7. 踩坑记录
 
 ### 编辑层
@@ -106,14 +118,19 @@ CSS 排版效果只能浏览器验收。
 - **`--no-save` 手工清单方案已废弃**（曾致误删）；依赖全部进 devDependencies。
 - **包元数据按名缓存**：改 `dsh.client`/`exports` 需重启 host。
 - **本地 npm 缓存 EPERM 时**：加 `--cache /tmp/<dir>` 可跑 `npm install --package-lock-only`（改 peerDependencies 后必须重生成 lockfile，否则 CI 的 `npm ci` 校验失败）。
+- **发布 gate 用 step output，不能用 `/tmp` marker**：runner 的 `hashFiles()` 只看工作区——实测 `hashFiles('/tmp/dsh-publish-ok')` 恒为空（工作区内相对路径/绝对路径都有值）。曾经的写法会让 `Publish to npm` 永远被跳过、再在 `Verify dist-tag` 上报错。同理 `Verify dist-tag` 只在真的发布时断言 `latest`，补打旧 tag 必须跳过它。
+
+### host 面（持久化）
+- **`writeFile(dir, '')` 不建目录**：`$DSH_HOME` 缺失时它会在该路径**造出一个同名文件**，随后 `ENOTDIR`，草稿一个字都存不下（旧代码还 `.catch(() => {})` 把错误吞了）。要建目录只能用 `mkdir(dir, { recursive: true })`。
+- **2MB 限制要量 text 的 UTF-8 字节**，不能量 JSON 请求体长度：否则"恰好 2MB 的正文"会被误判超限；`readBody` 自身的超长 reject 也要映射成 413 而不是 500。
 
 ### 宿主与运行
 - **`webServer` vs `httpServer`**：新旧键，代码有回退。
 - **route/文件名三处一致**。
 - **HMR 语义**：bundle 热替换只重跑 apply；host 从不热更。
 - **bundle id = 包名**，否则不激活。
-- **`ctx.locale` 是 inject-gated 服务**：未注入时访问 getter 直接抛 `cannot get property "locale" without inject`（可选链救不了 getter 抛错）；`isZh` 用 try/catch 降级浏览器语言（已注入 `locale`，正常不会走到）。
-- **GUI 需要认证**：未带 `dsh web` 打印的令牌 URL 打开时只得到 `dsh web authentication required`（cookie 由 activation secret 签名，无法离线伪造）——无头浏览器验收得用那个 URL。
+- **`ctx.locale` 是 inject-gated 服务**：未注入时访问 getter 直接抛 `cannot get property "locale" without inject`（可选链救不了 getter 抛错）；`readHostLocale` 用 try/catch 返回 null 并降级浏览器语言（已注入 `locale`，正常不会走到）。
+- **GUI 需要认证**：未带 `dsh web` 打印的令牌 URL 打开时只得到 `dsh web authentication required`（cookie 由 activation secret 签名，无法离线伪造）——无头浏览器整页验收得用那个 URL；`probe-browser.mjs` 因此走独立页面而不是真 GUI。
 
 ### 数据与兼容
-- `src/codec.js` 是 legacy 参考实现，勿当现行管线。
+- 数据就是纯 Markdown 文件 `$DSH_HOME/draft.md`：不带 session、不带元数据，任何工具都能读写。多会话/多标签同时打开同一草稿是 last-write-wins（无锁、无文件监听）。

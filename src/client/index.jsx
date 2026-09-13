@@ -19,7 +19,7 @@
  * document it edits is not — every mount reads the same draft file.
  */
 import { ScratchpadTab } from './editor.jsx'
-import { isZh } from './i18n.js'
+import { setHostLocale, readHostLocale, t } from './i18n.js'
 
 /** Services this half needs: the tab-type registry, the slot seats, and copy. */
 export const inject = ['sidebarRightTabs', 'slots', 'locale']
@@ -60,10 +60,19 @@ export function apply(ctx) {
   // Styles (editor theme + status bar) are injected by the editor itself on
   // mount, tagged data-plugin="dsh-draft" so HMR can drop them cleanly.
 
-  /** Title / guide copy reads the host locale on every use, so a language switch
-   *  needs no re-registration. */
-  const label = () => (isZh(ctx) ? '草稿' : 'Draft')
-  const blurb = () => (isZh(ctx) ? '随手写点什么，自动保存到磁盘' : 'Jot something down — autosaved to disk')
+  // One language source for the whole plugin: push the host preference into the
+  // i18n module now and again on every locale change, so the title, the guide
+  // copy and the editor's status bar never disagree.
+  const syncLocale = () => setHostLocale(readHostLocale(ctx))
+  ctx.effect(() => {
+    syncLocale()
+    return ctx.locale.subscribe(syncLocale)
+  }, 'dsh-draft: host locale bridge')
+
+  /** Title / guide copy is read on every use, so a language switch needs no
+   *  re-registration. */
+  const label = () => t('草稿', 'Draft')
+  const blurb = () => t('随手写点什么，自动保存到磁盘', 'Jot something down — autosaved to disk')
 
   /** The tab body; the seat's props (tab info hooks, locale) are not needed. */
   const DraftBody = () => <ScratchpadTab />

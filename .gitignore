@@ -8,6 +8,7 @@ lib/client.js
 # misc
 .DS_Store
 *.tmp-*
+*.tgz
 .npm-cache-tmp/
 
 # local project kanban board state (workspace tool artifact)

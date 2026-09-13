@@ -4,12 +4,15 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
@@ -22,20 +25,29 @@ jobs:
           V="$(node -p "require('./package.json').version")"
           T="${GITHUB_REF_NAME#v}"
           test "$V" = "$T" || { echo "package.json version $V != tag $T"; exit 1; }
-      - name: Gate — idempotent (skip if this version is already published)
+      # The outcome travels in a step output, not in a marker file: `hashFiles()`
+      # only sees the workspace, so a /tmp marker is invisible to a later step's
+      # `if:` — publish would be skipped silently. (Measured on a runner:
+      # hashFiles('/tmp/x') is empty, workspace paths hash normally.)
+      - name: Gate — already-published versions are skipped (backfilled tags stay safe)
+        id: published
         run: |
           V="$(node -p "require('./package.json').version")"
           if npm view "dsh-draft@${V}" version >/dev/null 2>&1; then
-            echo "dsh-draft@${V} already published — skipping publish (safe for backfilled tags)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "dsh-draft@${V} is already published — skipping publish"
           else
-            echo "proceed" > /tmp/dsh-publish-ok
+            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish to npm
-        if: hashFiles('/tmp/dsh-publish-ok') != ''
+        if: steps.published.outputs.skip != 'true'
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Only assert `latest` when this run did the publishing: a backfilled tag
+      # for an older version legitimately leaves `latest` where it is.
       - name: Verify dist-tag
+        if: steps.published.outputs.skip != 'true'
         run: |
           V="$(node -p "require('./package.json').version")"
           npm view dsh-draft dist-tags --json | grep -q "\"latest\": \"${V}\"" && echo "latest -> ${V} OK"
